@@ -29,7 +29,7 @@ test('weighted に minIndex を渡すと、それより下は出ない', () => {
 
 test('工場レベルは「部署のレベル合計 + ねこの数 + 1」', () => {
   const s = C.newGame(1);
-  s.rooms = { kitchen: 5, line: 3 };
+  s.rooms = { gohan: 5, kumitate: 3 };
   s.cats = [{ id: 'a', rarity: 'N', level: 1, room: null }, { id: 'b', rarity: 'N', level: 1, room: null }];
   assert.strictEqual(C.factoryLevel(s), 5 + 3 + 2 + 1);
 });
@@ -37,8 +37,8 @@ test('工場レベルは「部署のレベル合計 + ねこの数 + 1」', () =
 test('ねこがいない部署の倍率は 1 倍', () => {
   const s = C.newGame(1);
   s.cats = [];
-  assert.strictEqual(C.roomCatBonus(s, 'kitchen'), 1);
-  assert.strictEqual(C.roomRate(s, 'kitchen'), C.roomDef('kitchen').baseRate * 1);
+  assert.strictEqual(C.roomCatBonus(s, 'gohan'), 1);
+  assert.strictEqual(C.roomRate(s, 'gohan'), C.roomDef('gohan').baseRate * 1);
 });
 
 test('ねこの力はレア度とレベルで上がる', () => {
@@ -52,36 +52,36 @@ test('ねこの力はレア度とレベルで上がる', () => {
 
 test('建てていない部署はもうけを出さない', () => {
   const s = C.newGame(1);
-  assert.strictEqual(C.roomLevel(s, 'line'), 0);
-  assert.strictEqual(C.roomRate(s, 'line'), 0);
+  assert.strictEqual(C.roomLevel(s, 'kumitate'), 0);
+  assert.strictEqual(C.roomRate(s, 'kumitate'), 0);
 });
 
 test('きゅうけい室はもうけ 0、そのかわり全体の倍率を上げる', () => {
   const s = C.newGame(1);
   s.cats = [];
-  s.rooms = { kitchen: 10 };
+  s.rooms = { gohan: 10 };
   const before = C.totalRate(s);
-  s.rooms.lounge = 5;
-  assert.strictEqual(C.roomRate(s, 'lounge'), 0);
+  s.rooms.kyukei = 5;
+  assert.strictEqual(C.roomRate(s, 'kyukei'), 0);
   assert.ok(C.totalRate(s) > before, 'きゅうけい室を建てると全体が増える');
-  assert.strictEqual(C.boostMultiplier(s), 1 + 5 * C.roomDef('lounge').boostPerLevel);
+  assert.strictEqual(C.boostMultiplier(s), 1 + 5 * C.roomDef('kyukei').boostPerLevel);
 });
 
 test('値段はレベルが上がるほど高くなる', () => {
   const s = C.newGame(1);
-  const first = C.upgradeCost(s, 'line');
-  s.rooms.line = 10;
-  assert.ok(C.upgradeCost(s, 'line') > first);
+  const first = C.upgradeCost(s, 'kumitate');
+  s.rooms.kumitate = 10;
+  assert.ok(C.upgradeCost(s, 'kumitate') > first);
 });
 
 test('買えるだけ買う計算は、実際に買った結果と一致する', () => {
   const s = C.newGame(1);
-  s.rooms.kitchen = 1;
+  s.rooms.gohan = 1;
   s.money = 100000;
-  const plan = C.affordableLevels(s, 'kitchen', s.money);
+  const plan = C.affordableLevels(s, 'gohan', s.money);
   const before = s.money;
   let bought = 0;
-  while (C.buyUpgrade(s, 'kitchen')) bought++;
+  while (C.buyUpgrade(s, 'gohan')) bought++;
   assert.strictEqual(bought, plan.levels);
   assert.strictEqual(before - s.money, plan.cost);
 });
@@ -91,29 +91,29 @@ test('買えるだけ買う計算は、実際に買った結果と一致する',
 test('お金が足りないと買えないし、減りもしない', () => {
   const s = C.newGame(1);
   s.money = 0;
-  assert.strictEqual(C.buyUpgrade(s, 'kitchen'), false);
+  assert.strictEqual(C.buyUpgrade(s, 'gohan'), false);
   assert.strictEqual(s.money, 0);
-  assert.strictEqual(C.roomLevel(s, 'kitchen'), 1);
+  assert.strictEqual(C.roomLevel(s, 'gohan'), 1);
 });
 
 test('工場レベルが足りない部署は買えない', () => {
   const s = C.newGame(1);
   s.money = Infinity;
-  assert.strictEqual(C.isUnlocked(s, 'ship'), false);
-  assert.strictEqual(C.buyUpgrade(s, 'ship'), false);
+  assert.strictEqual(C.isUnlocked(s, 'shukka'), false);
+  assert.strictEqual(C.buyUpgrade(s, 'shukka'), false);
 });
 
 test('席の数より多くは配属できない', () => {
   const s = C.newGame(1);
   s.cats = [];
-  const def = C.roomDef('kitchen');
+  const def = C.roomDef('gohan');
   const rng = C.mulberry32(5);
   for (let i = 0; i < def.slots + 2; i++) s.cats.push(C.newCat(rng));
   for (const cat of s.cats) cat.room = null;
   let ok = 0;
-  for (const cat of s.cats) if (C.assignCat(s, cat.id, 'kitchen')) ok++;
+  for (const cat of s.cats) if (C.assignCat(s, cat.id, 'gohan')) ok++;
   assert.strictEqual(ok, def.slots);
-  assert.strictEqual(C.catsIn(s, 'kitchen').length, def.slots);
+  assert.strictEqual(C.catsIn(s, 'gohan').length, def.slots);
 });
 
 test('ねこのレベル上げはにくきゅうを払い、足りなければ何も起きない', () => {
@@ -152,12 +152,12 @@ test('あぶれたねこは、部署を建てると席につく', () => {
   const rng = C.mulberry32(2);
   for (let i = 0; i < 8; i++) C.addCat(s, C.newCat(rng));
   const idle = s.cats.filter((c) => c.room === null).length;
-  assert.ok(idle > 0, 'きゅうしょく室の席は 3 つなので、あぶれるはず');
-  s.rooms.line = 0;
-  s.money = C.upgradeCost(s, 'line');
-  s.rooms.kitchen = 20; // 工場レベルを上げて解放する
-  assert.strictEqual(C.buyUpgrade(s, 'line'), true);
-  assert.ok(C.catsIn(s, 'line').length > 0, '建てた部署にねこが入る');
+  assert.ok(idle > 0, 'ごはん工房の持ち場は 3 つなので、あぶれるはず');
+  s.rooms.kumitate = 0;
+  s.money = C.upgradeCost(s, 'kumitate');
+  s.rooms.gohan = 20; // 工場レベルを上げて解放する
+  assert.strictEqual(C.buyUpgrade(s, 'kumitate'), true);
+  assert.ok(C.catsIn(s, 'kumitate').length > 0, '建てた部署にねこが入る');
 });
 
 // ------------------------------------------------------------ 時間
@@ -234,7 +234,7 @@ test('工場レベルのごほうびは、何度呼んでも二重に出ない',
   const paw = s.paw;
   assert.strictEqual(C.claimLevelRewards(s), 0);
   assert.strictEqual(s.paw, paw);
-  s.rooms.kitchen = 6;
+  s.rooms.gohan = 6;
   assert.strictEqual(C.claimLevelRewards(s), 5);
   assert.strictEqual(s.paw, paw + 5);
   assert.strictEqual(C.claimLevelRewards(s), 0);
@@ -255,7 +255,7 @@ test('あわのごほうびは、お金かにくきゅうのどちらか', () =>
   const rng = C.mulberry32(11);
   let money = 0, paw = 0;
   for (let i = 0; i < 300; i++) {
-    const r = C.bubbleReward(s, 'kitchen', rng);
+    const r = C.bubbleReward(s, 'gohan', rng);
     assert.ok(r.amount > 0);
     if (r.kind === 'paw') paw++; else money++;
   }
@@ -275,10 +275,10 @@ test('タップのごほうびは 1 円を下回らない', () => {
 test('保存して読み直すと同じ中身になる', () => {
   const s = C.newGame(7);
   s.money = 12345.5;
-  s.rooms.line = 4;
+  s.rooms.kumitate = 4;
   const back = C.deserialize(C.serialize(s));
   assert.strictEqual(back.money, s.money);
-  assert.strictEqual(back.rooms.line, 4);
+  assert.strictEqual(back.rooms.kumitate, 4);
   assert.strictEqual(back.cats.length, s.cats.length);
   assert.strictEqual(C.factoryLevel(back), C.factoryLevel(s));
 });
@@ -295,7 +295,7 @@ test('セーブが壊れていても、新品として必ず開ける', () => {
 test('セーブのおかしな値は取り込まない', () => {
   const s = C.deserialize(JSON.stringify({
     money: -999, paw: NaN, cats: [{ id: 'x', level: -3, rarity: 'ZZZ', kind: 'nope', room: 'nowhere' }],
-    rooms: { kitchen: 2, ghost: 9 }, gameMinutes: 99999
+    rooms: { gohan: 2, ghost: 9 }, gameMinutes: 99999
   }), 1);
   assert.ok(s.money >= 0);
   assert.ok(Number.isFinite(s.paw));
@@ -307,13 +307,13 @@ test('セーブのおかしな値は取り込まない', () => {
 });
 
 test('席あふれのセーブは、読むときに直る', () => {
-  const def = C.roomDef('kitchen');
+  const def = C.roomDef('gohan');
   const cats = [];
   for (let i = 0; i < def.slots + 3; i++) {
-    cats.push({ id: 'c' + i, name: 'x', kind: 'kiji', rarity: 'N', level: 1, room: 'kitchen' });
+    cats.push({ id: 'c' + i, name: 'x', kind: 'kiji', rarity: 'N', level: 1, room: 'gohan' });
   }
-  const s = C.deserialize(JSON.stringify({ rooms: { kitchen: 1 }, cats: cats }), 1);
-  assert.strictEqual(C.catsIn(s, 'kitchen').length, def.slots);
+  const s = C.deserialize(JSON.stringify({ rooms: { gohan: 1 }, cats: cats }), 1);
+  assert.strictEqual(C.catsIn(s, 'gohan').length, def.slots);
   assert.strictEqual(s.cats.length, def.slots + 3);
 });
 
@@ -336,15 +336,49 @@ test('留守の長さの書き方', () => {
   assert.strictEqual(C.formatDuration(3 * 3600 * 1000 + 60000), '3 時間 1 分');
 });
 
-test('席は必ず部屋のなかに収まる', () => {
+test('持ち場は必ず部屋のなかに収まる', () => {
   for (const def of C.ROOMS) {
     const slots = C.slotPositions(def);
     assert.strictEqual(slots.length, def.slots);
     for (const s of slots) {
-      assert.ok(s.x > 0 && s.x < def.w, `${def.id} の席が横にはみ出す: ${s.x}`);
-      assert.ok(s.y > 0 && s.y < def.h, `${def.id} の席が縦にはみ出す: ${s.y}`);
+      assert.ok(s.x > 0 && s.x < def.w, `${def.id} の持ち場が横にはみ出す: ${s.x}`);
+      assert.ok(s.y > 0 && s.y < def.h, `${def.id} の持ち場が縦にはみ出す: ${s.y}`);
     }
   }
+});
+
+test('持ち場はベルトをはさんで両側に分かれる', () => {
+  for (const def of C.ROOMS) {
+    const belt = C.beltLine(def);
+    const slots = C.slotPositions(def);
+    const back = slots.filter((s) => s.side === -1);
+    const front = slots.filter((s) => s.side === 1);
+    assert.ok(back.length > 0 && front.length > 0, `${def.id} が片側にかたよっている`);
+    for (const s of back) assert.ok(s.y < belt.y, `${def.id}: 奥がわの持ち場がベルトの手前にある`);
+    for (const s of front) assert.ok(s.y > belt.y, `${def.id}: 手前がわの持ち場がベルトの奥にある`);
+  }
+});
+
+test('ベルトは部屋のなかを通る', () => {
+  for (const def of C.ROOMS) {
+    const belt = C.beltLine(def);
+    assert.ok(belt.x0 > 0 && belt.x1 < def.w, `${def.id} のベルトが横にはみ出す`);
+    assert.ok(belt.x1 - belt.x0 > 0.8, `${def.id} のベルトが短すぎる`);
+    assert.ok(belt.y > 0 && belt.y < def.h, `${def.id} のベルトが縦にはみ出す`);
+  }
+});
+
+test('前の版のセーブは、新しい部署の名前に読みかえる', () => {
+  const s = C.deserialize(JSON.stringify({
+    money: 500,
+    rooms: { kitchen: 5, dev: 2 },
+    cats: [{ id: 'a', name: 'とら', kind: 'kiji', rarity: 'R', level: 3, room: 'dev' }]
+  }));
+  assert.strictEqual(s.rooms.gohan, 5, 'きゅうしょく室 → ごはん工房');
+  assert.strictEqual(s.rooms.keito, 2, 'かいはつ室 → けいと工房');
+  assert.strictEqual(s.cats[0].room, 'keito', 'ねこも引っ越す');
+  assert.strictEqual(s.cats[0].level, 3);
+  assert.strictEqual(s.money, 500);
 });
 
 test('部署どうしは重ならない', () => {

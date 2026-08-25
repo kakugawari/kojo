@@ -169,8 +169,8 @@ async function run() {
     const before = await phone.evaluate(() => window.__app.state().money);
     const catPlace = await phone.evaluate(() =>
       document.querySelector('#layerRooms [data-cat]').getAttribute('transform'));
-    // ねこの絵はすき間だらけなので、からだ (最初の ellipse) をねらう
-    await tapAt(phone, '#layerRooms [data-cat] .bob ellipse');
+    // ねこの絵はすき間だらけなので、からだ (.body) をねらう
+    await tapAt(phone, '#layerRooms [data-cat] .bob .body');
     await phone.waitForTimeout(150);
     const petted = await phone.evaluate(() => ({
       money: window.__app.state().money,
@@ -188,7 +188,7 @@ async function run() {
       document.querySelector('#layerRooms [data-cat]').getAttribute('transform'));
     ok(catPlace === catPlaceAfter, `なでても、ねこの置き場所そのものは動かない (${catPlaceAfter})`);
     const jump = await measureJump(phone, '#layerRooms [data-cat]', `
-      const el = document.querySelector('#layerRooms [data-cat] .bob ellipse');
+      const el = document.querySelector('#layerRooms [data-cat] .bob .body');
       const r = el.getBoundingClientRect();
       const o = { bubbles: true, pointerId: 9, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 };
       el.dispatchEvent(new PointerEvent('pointerdown', o));
@@ -218,6 +218,39 @@ async function run() {
     }));
     ok(popped.left === 0, 'タップしたあわは消える');
     ok(popped.total > beforePop, 'あわのごほうびが入る');
+
+    // ------------------------------------------------ ベルトコンベア
+    section('ベルトコンベア');
+    const belt = await phone.evaluate(() => {
+      const items = document.querySelectorAll('#layerRooms .flow');
+      const rooms = window.__app.core.ROOMS.filter((d) => d.product).length;
+      return { items: items.length, rooms: rooms, anims: [...items].filter((el) => el.getAnimations().length > 0).length };
+    });
+    ok(belt.items === belt.rooms * 3, `流れているものが部署ぶんある (${belt.items} 個 / ${belt.rooms} 部署)`);
+    ok(belt.anims === belt.items, `ぜんぶ動いている (${belt.anims}/${belt.items})`);
+
+    const moved = await phone.evaluate(() => new Promise((res) => {
+      const el = document.querySelector('#layerRooms .flow');
+      const a = el.getBoundingClientRect();
+      setTimeout(() => {
+        const b = el.getBoundingClientRect();
+        res(Math.round(Math.hypot(b.left - a.left, b.top - a.top)));
+      }, 700);
+    }));
+    ok(moved > 3, `1 秒たたずにベルトの上を ${moved}px 進む`);
+
+    // 機械が動いているか (プレス・糸車・クレーン・ゲートの光)
+    const machines = await phone.evaluate(() => {
+      const out = {};
+      for (const cls of ['press', 'spin', 'swing', 'blink', 'puff']) {
+        const list = document.querySelectorAll('.' + cls);
+        out[cls] = [...list].filter((el) => el.getAnimations().length > 0).length;
+      }
+      return out;
+    });
+    for (const cls of ['press', 'spin', 'swing', 'blink', 'puff']) {
+      ok(machines[cls] > 0, `${cls} が動いている (${machines[cls]} 個)`);
+    }
 
     // ------------------------------------------------ 指でなぞる / つまむ
     section('指でうごかす');
@@ -249,7 +282,7 @@ async function run() {
     // ------------------------------------------------ 部署をタップして育てる
     section('部署を育てる');
     await phone.evaluate(() => window.__app.closeSheet());
-    await tapAt(phone, '#layerRooms [data-room="kitchen"] polygon');
+    await tapAt(phone, '#layerRooms [data-room="gohan"] polygon');
     await phone.waitForTimeout(200);
     const opened = await phone.evaluate(() => ({
       open: !document.getElementById('sheetWrap').hidden,
@@ -257,15 +290,15 @@ async function run() {
     }));
     // 指でタップすると click があとから来る。開いた板の裏に当たって
     // 一瞬で閉じたことがあるので、開いたままかどうかまで見る
-    ok(opened.open && opened.title.includes('きゅうしょく'),
+    ok(opened.open && opened.title.includes('ごはん工房'),
       `部署をタップすると中身が出て、開いたままになる (${opened.title} / ${opened.open ? '開' : '閉'})`);
 
-    const lvBefore = await phone.evaluate(() => window.__app.core.roomLevel(window.__app.state(), 'kitchen'));
-    await phone.locator('#sheetBody [data-buy="kitchen"]').tap();
+    const lvBefore = await phone.evaluate(() => window.__app.core.roomLevel(window.__app.state(), 'gohan'));
+    await phone.locator('#sheetBody [data-buy="gohan"]').tap();
     await phone.waitForTimeout(200);
     const lvAfter = await phone.evaluate(() => ({
-      level: window.__app.core.roomLevel(window.__app.state(), 'kitchen'),
-      sign: document.querySelector('#layerSigns [data-sign="kitchen"] text').textContent
+      level: window.__app.core.roomLevel(window.__app.state(), 'gohan'),
+      sign: document.querySelector('#layerSigns [data-sign="gohan"] text').textContent
     }));
     ok(lvAfter.level === lvBefore + 1, `ボタンを押すとレベルが上がる (${lvBefore} → ${lvAfter.level})`);
     ok(lvAfter.sign.includes('Lv.' + lvAfter.level), `看板の表示も一緒に変わる (${lvAfter.sign.trim()})`);
@@ -283,6 +316,10 @@ async function run() {
     }));
     ok(gacha.cats === catsBefore + 10, `10 連でねこが 10 ぴき増える (${catsBefore} → ${gacha.cats})`);
     ok(gacha.shown === 10, `引いた 10 ぴきが並ぶ (${gacha.shown})`);
+    // 板は 0.6 秒ごとに描き直される。結果がそこで消えないか
+    await phone.waitForTimeout(1200);
+    const stillThere = await phone.evaluate(() => document.querySelectorAll('#gachaResult .cat-card').length);
+    ok(stillThere === 10, `少し待っても結果が消えない (${stillThere})`);
 
     // ------------------------------------------------ 時間帯
     section('朝と夜');
@@ -304,10 +341,10 @@ async function run() {
     const reloaded = await phone.evaluate(() => ({
       money: window.__app.state().money,
       cats: window.__app.state().cats.length,
-      kitchen: window.__app.core.roomLevel(window.__app.state(), 'kitchen')
+      gohan: window.__app.core.roomLevel(window.__app.state(), 'gohan')
     }));
     ok(reloaded.money >= 1234567, `お金が続きから始まる (${Math.round(reloaded.money)})`);
-    ok(reloaded.cats > 10 && reloaded.kitchen > 1, `ねこと部署も残っている (ねこ ${reloaded.cats} / きゅうしょく室 Lv.${reloaded.kitchen})`);
+    ok(reloaded.cats > 10 && reloaded.gohan > 1, `ねこと部署も残っている (ねこ ${reloaded.cats} / ごはん工房 Lv.${reloaded.gohan})`);
 
     // セーブが壊れていても開けるか
     await phone.evaluate(() => localStorage.setItem(window.__app.core.SAVE_KEY, '{こわれ'));

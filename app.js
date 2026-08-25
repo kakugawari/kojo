@@ -53,85 +53,125 @@
 
   // ------------------------------------------------------------ ねこの絵
 
+  /*
+   * ねこは「まるい頭 + まるい体」の 2 つの塊だけで作る。
+   * 頭を体より大きくして、顔のパーツを下のほうに寄せると幼く見える。
+   * 足もとが (0,0)、頭のてっぺんが y=-63。
+   */
+  const BODY_PATH = 'M0,-30.5 C11.4,-30.5 19,-21.6 19,-11.4 C19,-3.4 12.6,1.6 0,1.6 ' +
+    'C-12.6,1.6 -19,-3.4 -19,-11.4 C-19,-21.6 -11.4,-30.5 0,-30.5 Z';
+
+  // ほっぺたのところを少しふくらませて、もふっとした輪郭にする
+  const HEAD_PATH = 'M0,-63 C11.6,-63 20.2,-54.8 20.2,-45.2 C20.2,-42.6 21.8,-41 21,-39 ' +
+    'C20.2,-37 17.8,-36.9 16.8,-34.8 C13.6,-29.6 7.4,-26.6 0,-26.6 ' +
+    'C-7.4,-26.6 -13.6,-29.6 -16.8,-34.8 C-17.8,-36.9 -20.2,-37 -21,-39 ' +
+    'C-21.8,-41 -20.2,-42.6 -20.2,-45.2 C-20.2,-54.8 -11.6,-63 0,-63 Z';
+
+  const EAR_PATH = 'M-17,-52.4 C-18.8,-58.6 -18.4,-64.2 -15.8,-65.2 C-13.2,-66.2 -8.6,-61.4 -5.2,-57.4 Z';
+  const EAR_INNER = 'M-15.3,-54 C-16.5,-58.4 -16.2,-62 -14.8,-62.6 C-13.4,-63.2 -10.6,-60.2 -8.4,-57.6 Z';
+
+  const EYE_OPEN =
+    '<ellipse cx="-8.2" cy="-43" rx="4.1" ry="4.9" fill="#3b3140"/>' +
+    '<ellipse cx="8.2" cy="-43" rx="4.1" ry="4.9" fill="#3b3140"/>' +
+    '<circle cx="-6.7" cy="-44.8" r="1.6" fill="#fff"/><circle cx="9.7" cy="-44.8" r="1.6" fill="#fff"/>' +
+    '<circle cx="-9.5" cy="-41.2" r="0.9" fill="#fff" opacity=".7"/>' +
+    '<circle cx="6.9" cy="-41.2" r="0.9" fill="#fff" opacity=".7"/>';
+
   const FACE_EYES = [
-    // ふつう
-    '<ellipse cx="-6.2" cy="-39.5" rx="2.7" ry="3.3" fill="#3b3140"/><ellipse cx="6.2" cy="-39.5" rx="2.7" ry="3.3" fill="#3b3140"/>' +
-    '<circle cx="-5.3" cy="-40.7" r="1" fill="#fff"/><circle cx="7.1" cy="-40.7" r="1" fill="#fff"/>',
+    EYE_OPEN,
     // にっこり
-    '<path d="M-8.6,-39.4 q2.4,-3 4.8,0 M3.8,-39.4 q2.4,-3 4.8,0" fill="none" stroke="#3b3140" stroke-width="2" stroke-linecap="round"/>',
+    '<path d="M-12.6,-43 q4.4,-5 8.8,0 M3.8,-43 q4.4,-5 8.8,0" fill="none" stroke="#3b3140" ' +
+      'stroke-width="2.4" stroke-linecap="round"/>',
     // ねむい
-    '<path d="M-8.6,-39.6 q2.4,2.6 4.8,0 M3.8,-39.6 q2.4,2.6 4.8,0" fill="none" stroke="#3b3140" stroke-width="2" stroke-linecap="round"/>',
-    // まんまる
-    '<ellipse cx="-6.2" cy="-39.5" rx="3.1" ry="3.4" fill="#3b3140"/><ellipse cx="6.2" cy="-39.5" rx="3.1" ry="3.4" fill="#3b3140"/>' +
-    '<circle cx="-5.1" cy="-40.9" r="1.2" fill="#fff"/><circle cx="7.3" cy="-40.9" r="1.2" fill="#fff"/>'
+    '<path d="M-12.6,-43.6 q4.4,4 8.8,0 M3.8,-43.6 q4.4,4 8.8,0" fill="none" stroke="#3b3140" ' +
+      'stroke-width="2.4" stroke-linecap="round"/>',
+    // かたっぽウインク
+    '<ellipse cx="-8.2" cy="-43" rx="4.1" ry="4.9" fill="#3b3140"/>' +
+      '<circle cx="-6.7" cy="-44.8" r="1.6" fill="#fff"/>' +
+      '<path d="M3.8,-43 q4.4,-5 8.8,0" fill="none" stroke="#3b3140" stroke-width="2.4" stroke-linecap="round"/>'
   ];
 
   /**
-   * ねこ 1 ぴきの絵。足もとが (0,0)、頭のてっぺんが y=-56 あたり。
-   * scarf に部署の色を渡すと、その部署の制服になる。
+   * ねこ 1 ぴきの絵。apron に部署の色を渡すと、その部署の前かけをつける。
    */
-  function catSVG(cat, scarf) {
+  function catSVG(cat, apron) {
     const k = C.kindDef(cat.kind);
     const r = C.rarityDef(cat.rarity);
     const fur = k.fur, dark = k.dark, belly = k.belly;
+    const earFill = k.points ? dark : fur;
     let s = '';
 
-    // しっぽ (体のうしろ)
-    s += '<path d="M13,-12 q17,0 15,-19 q-1,-8 -8,-6" fill="none" stroke="' + INK + '" stroke-width="9.5" stroke-linecap="round"/>';
-    s += '<path d="M13,-12 q17,0 15,-19 q-1,-8 -8,-6" fill="none" stroke="' + fur + '" stroke-width="6.2" stroke-linecap="round"/>';
+    // しっぽ (体のうしろ)。太い線を 2 本かさねて縁取りにする
+    const tail = 'M15,-9 C30,-11.5 34.5,-23 28.5,-31.4 C26,-35 21.4,-34.2 20.4,-30.4';
+    s += '<path d="' + tail + '" fill="none" stroke="' + INK + '" stroke-width="12" stroke-linecap="round"/>';
+    s += '<path d="' + tail + '" fill="none" stroke="' + fur + '" stroke-width="8.4" stroke-linecap="round"/>';
 
     // からだ
-    s += '<ellipse cx="0" cy="-13" rx="15" ry="13.5" fill="' + fur + '" stroke="' + INK + '" stroke-width="2.2"/>';
-    s += '<ellipse cx="0" cy="-9.5" rx="9.5" ry="8.5" fill="' + belly + '" opacity=".85"/>';
+    s += '<path class="body" d="' + BODY_PATH + '" fill="' + fur + '" stroke="' + INK +
+      '" stroke-width="2.2" stroke-linejoin="round"/>';
+    s += '<ellipse cx="0" cy="-8" rx="11.4" ry="9.2" fill="' + belly + '" opacity=".85"/>';
     if (k.stripes) {
-      s += '<path d="M-13,-19 q3.5,2 0,4 M13,-19 q-3.5,2 0,4" fill="none" stroke="' + dark + '" stroke-width="2.2" stroke-linecap="round"/>';
+      s += '<path d="M-15.6,-20.4 q4.6,2.4 0,5.2 M15.6,-20.4 q-4.6,2.4 0,5.2" fill="none" stroke="' + dark +
+        '" stroke-width="2.4" stroke-linecap="round"/>';
     }
-    if (k.calico) s += '<ellipse cx="8" cy="-18" rx="6" ry="5" fill="#f0a860" opacity=".9"/>';
+    if (k.calico) s += '<ellipse cx="9.6" cy="-21" rx="6.6" ry="5.4" fill="#f0a860" opacity=".9"/>';
+
     // 前あし
-    s += '<ellipse cx="-7" cy="-2.6" rx="5" ry="3.4" fill="' + belly + '" stroke="' + INK + '" stroke-width="1.8"/>';
-    s += '<ellipse cx="7" cy="-2.6" rx="5" ry="3.4" fill="' + belly + '" stroke="' + INK + '" stroke-width="1.8"/>';
+    s += '<ellipse cx="-8.4" cy="-1.4" rx="6.3" ry="4.5" fill="' + belly + '" stroke="' + INK + '" stroke-width="1.9"/>';
+    s += '<ellipse cx="8.4" cy="-1.4" rx="6.3" ry="4.5" fill="' + belly + '" stroke="' + INK + '" stroke-width="1.9"/>';
+    s += '<path d="M-8.4,-4.4 v2.2 M-11,-3.8 v1.8 M-5.8,-3.8 v1.8 M8.4,-4.4 v2.2 M5.8,-3.8 v1.8 M11,-3.8 v1.8" ' +
+      'fill="none" stroke="' + INK + '" stroke-width="1" stroke-linecap="round" opacity=".45"/>';
 
-    // 制服 (部署の色)
-    if (scarf) {
-      s += '<path d="M-11,-24.5 q11,7 22,0 q-2.5,8 -11,8 q-8.5,0 -11,-8" fill="' + scarf + '" stroke="' + INK + '" stroke-width="1.8" stroke-linejoin="round"/>';
+    // 前かけ (部署の色)
+    if (apron) {
+      s += '<path d="M-13,-27.4 C-6.6,-21.6 6.6,-21.6 13,-27.4 C12,-18.6 6.8,-14.6 0,-14.6 ' +
+        'C-6.8,-14.6 -12,-18.6 -13,-27.4 Z" fill="' + apron + '" stroke="' + INK +
+        '" stroke-width="1.9" stroke-linejoin="round"/>';
+      s += '<path d="M-5.6,-20.6 h11.2" fill="none" stroke="' + INK + '" stroke-width="1.4" opacity=".45"/>';
     }
 
-    // みみ
-    const earFill = k.points ? dark : fur;
-    s += '<path d="M-15,-42 L-18.5,-56 L-4,-47 Z" fill="' + earFill + '" stroke="' + INK + '" stroke-width="2.2" stroke-linejoin="round"/>';
-    s += '<path d="M15,-42 L18.5,-56 L4,-47 Z" fill="' + earFill + '" stroke="' + INK + '" stroke-width="2.2" stroke-linejoin="round"/>';
-    s += '<path d="M-13.6,-44.4 L-15.6,-52 L-7.4,-47 Z" fill="#ffb3c4" opacity=".9"/>';
-    s += '<path d="M13.6,-44.4 L15.6,-52 L7.4,-47 Z" fill="#ffb3c4" opacity=".9"/>';
+    // みみ (頭のうしろ)。右は左を鏡にしてゆがみを出さない
+    const ear = '<path d="' + EAR_PATH + '" fill="' + earFill + '" stroke="' + INK +
+      '" stroke-width="2.2" stroke-linejoin="round"/><path d="' + EAR_INNER + '" fill="#ffb3c4" opacity=".92"/>';
+    s += ear + '<g transform="scale(-1,1)">' + ear + '</g>';
 
     // あたま
-    s += '<ellipse cx="0" cy="-38" rx="16.5" ry="15" fill="' + fur + '" stroke="' + INK + '" stroke-width="2.2"/>';
-    if (k.points) s += '<ellipse cx="0" cy="-33.5" rx="11" ry="9" fill="' + dark + '" opacity=".45"/>';
-    if (k.calico) s += '<ellipse cx="-9" cy="-45" rx="7" ry="5.4" fill="#f0a860" opacity=".92"/>';
-    if (k.tuxedo) s += '<path d="M0,-52.5 q4.5,8 0,14 q-4.5,-6 0,-14" fill="#ffffff"/>';
+    s += '<path d="' + HEAD_PATH + '" fill="' + fur + '" stroke="' + INK +
+      '" stroke-width="2.2" stroke-linejoin="round"/>';
+    if (k.points) s += '<ellipse cx="0" cy="-35.5" rx="12.4" ry="9.4" fill="' + dark + '" opacity=".38"/>';
+    if (k.calico) s += '<ellipse cx="-10.2" cy="-50" rx="7.8" ry="6" fill="#f0a860" opacity=".92"/>';
+    if (k.tuxedo) s += '<path d="M0,-61.4 q5.4,9.2 0,15.8 q-5.4,-6.6 0,-15.8" fill="#ffffff"/>';
     if (k.stripes) {
-      s += '<path d="M-6,-49.5 l-.6,4.4 M0,-51 l0,4.6 M6,-49.5 l.6,4.4" fill="none" stroke="' + dark +
-        '" stroke-width="2.2" stroke-linecap="round"/>';
+      s += '<path d="M-8,-57.6 l-1,4.8 M0,-59.8 l0,5 M8,-57.6 l1,4.8" fill="none" stroke="' + dark +
+        '" stroke-width="2.4" stroke-linecap="round"/>';
     }
-    s += '<ellipse cx="0" cy="-32.5" rx="8.8" ry="6.2" fill="' + belly + '" opacity=".8"/>';
-    s += '<ellipse cx="-11.4" cy="-34.4" rx="3.5" ry="2.3" fill="#ffa8bd" opacity=".7"/>';
-    s += '<ellipse cx="11.4" cy="-34.4" rx="3.5" ry="2.3" fill="#ffa8bd" opacity=".7"/>';
+
+    // かお。目と口を下のほうに寄せると幼く見える
+    s += '<ellipse cx="0" cy="-36" rx="10.4" ry="7.2" fill="' + belly + '" opacity=".72"/>';
+    s += '<ellipse cx="-14.2" cy="-37.4" rx="4.6" ry="2.9" fill="#ffa3ba" opacity=".72"/>';
+    s += '<ellipse cx="14.2" cy="-37.4" rx="4.6" ry="2.9" fill="#ffa3ba" opacity=".72"/>';
     s += FACE_EYES[cat.face & 3];
-    s += '<path d="M-2.2,-34.4 L2.2,-34.4 L0,-31.9 Z" fill="#ff9aae" stroke="' + INK + '" stroke-width="1" stroke-linejoin="round"/>';
-    s += '<path d="M0,-31.6 q-3,3.2 -5.6,.4 M0,-31.6 q3,3.2 5.6,.4" fill="none" stroke="' + INK + '" stroke-width="1.5" stroke-linecap="round"/>';
-    s += '<path d="M-10,-33 l-7,-1.6 M-10,-30.6 l-7,1.4 M10,-33 l7,-1.6 M10,-30.6 l7,1.4" fill="none" stroke="' + INK +
-      '" stroke-width="1.1" stroke-linecap="round" opacity=".55"/>';
+    s += '<path d="M-2.7,-38.6 L2.7,-38.6 L0,-35.6 Z" fill="#ff93a9" stroke="' + INK +
+      '" stroke-width="1" stroke-linejoin="round"/>';
+    s += '<path d="M0,-35.4 q-3.4,3.6 -6.2,.2 M0,-35.4 q3.4,3.6 6.2,.2" fill="none" stroke="' + INK +
+      '" stroke-width="1.6" stroke-linecap="round"/>';
+    s += '<path d="M-12.6,-38.6 l-8.4,-2.4 M-12.6,-35.6 l-8.4,1.6 M12.6,-38.6 l8.4,-2.4 M12.6,-35.6 l8.4,1.6" ' +
+      'fill="none" stroke="' + INK + '" stroke-width="1.1" stroke-linecap="round" opacity=".42"/>';
 
     // レア度のしるし
     if (r.id === 'R') {
-      s += '<g transform="translate(-11,-51) rotate(-18)"><path d="M0,0 l-6,-4 l0,7 z M0,0 l6,-4 l0,7 z" fill="#ff7fa8" stroke="' + INK +
-        '" stroke-width="1.4" stroke-linejoin="round"/><circle cx="0" cy="1.4" r="2.4" fill="#ffd0e0" stroke="' + INK + '" stroke-width="1.2"/></g>';
+      s += '<g transform="translate(-13.5,-56) rotate(-16)">' +
+        '<path d="M0,0 l-7,-4.6 l0,8 z M0,0 l7,-4.6 l0,8 z" fill="#ff7fa8" stroke="' + INK +
+        '" stroke-width="1.5" stroke-linejoin="round"/>' +
+        '<circle cx="0" cy="1.6" r="2.8" fill="#ffd0e0" stroke="' + INK + '" stroke-width="1.3"/></g>';
     } else if (r.id === 'SR') {
-      s += '<path d="M-9,-52 l1.5,-8 l5,4.6 l2.5,-6.4 l2.5,6.4 l5,-4.6 l1.5,8 z" fill="#ffd24a" stroke="' + INK +
-        '" stroke-width="1.6" stroke-linejoin="round"/>';
+      s += '<path d="M-10.4,-57.6 L-8.4,-67.4 L-3.2,-62 L0,-69.6 L3.2,-62 L8.4,-67.4 L10.4,-57.6 Z" ' +
+        'fill="#ffd24a" stroke="' + INK + '" stroke-width="1.8" stroke-linejoin="round"/>' +
+        '<circle cx="0" cy="-60.4" r="1.6" fill="#ff7fa8"/>';
     } else if (r.id === 'UR') {
-      s += '<ellipse cx="0" cy="-60" rx="10" ry="3.4" fill="none" stroke="#ffdc55" stroke-width="3.4"/>';
-      s += '<path d="M-22,-46 l1.4,3.4 l3.4,1.4 l-3.4,1.4 l-1.4,3.4 l-1.4,-3.4 l-3.4,-1.4 l3.4,-1.4 z" fill="#fff3a8"/>';
-      s += '<path d="M22,-52 l1.1,2.7 l2.7,1.1 l-2.7,1.1 l-1.1,2.7 l-1.1,-2.7 l-2.7,-1.1 l2.7,-1.1 z" fill="#fff3a8"/>';
+      s += '<ellipse cx="0" cy="-70.5" rx="11.4" ry="3.8" fill="none" stroke="#ffdc55" stroke-width="3.6"/>';
+      s += '<path d="M-25,-50 l1.6,3.8 l3.8,1.6 l-3.8,1.6 l-1.6,3.8 l-1.6,-3.8 l-3.8,-1.6 l3.8,-1.6 z" fill="#fff3a8"/>';
+      s += '<path d="M25,-57 l1.2,3 l3,1.2 l-3,1.2 l-1.2,3 l-1.2,-3 l-3,-1.2 l3,-1.2 z" fill="#fff3a8"/>';
     }
     return s;
   }
@@ -139,7 +179,7 @@
   /** パネルに出す小さいねこ。 */
   function catPortrait(cat, size) {
     const h = size || 52;
-    return '<svg viewBox="-30 -66 60 70" width="' + (h * 60 / 70).toFixed(0) + '" height="' + h + '" aria-hidden="true">' +
+    return '<svg viewBox="-37 -78 74 82" width="' + (h * 74 / 82).toFixed(0) + '" height="' + h + '" aria-hidden="true">' +
       catSVG(cat, null) + '</svg>';
   }
 
@@ -155,132 +195,229 @@
       .map((v) => v.toString(16).padStart(2, '0')).join('');
   }
 
-  /** 廊下や地面。部署の下じき。 */
+  function line(ax, ay, az, bx, by, bz) {
+    const p = C.iso(ax, ay, az || 0);
+    const q = C.iso(bx, by, bz || 0);
+    return '<line x1="' + p.x.toFixed(1) + '" y1="' + p.y.toFixed(1) +
+      '" x2="' + q.x.toFixed(1) + '" y2="' + q.y.toFixed(1) + '"/>';
+  }
+
+  function at(x, y, z, inner) {
+    const p = C.iso(x, y, z || 0);
+    return '<g transform="translate(' + p.x.toFixed(1) + ' ' + p.y.toFixed(1) + ')">' + inner + '</g>';
+  }
+
+  /** 敷地。廊下、外の木、煙突。 */
   function groundMarkup() {
     const m = 0.6, GW = C.GRID.w, GH = C.GRID.h, drop = -20;
     let s = '';
+    // 煙突 (建物のうしろ)
+    s += chimneyMarkup(4.6, -1.9, 118);
+    s += chimneyMarkup(6.4, -2.3, 92);
     // 側面 (手前の 2 辺を下に伸ばす)
     s += poly([pt(GW + m, -m, 0), pt(GW + m, GH + m, 0), pt(GW + m, GH + m, drop), pt(GW + m, -m, drop)], '#d9bda6', INK, 2);
     s += poly([pt(-m, GH + m, 0), pt(GW + m, GH + m, 0), pt(GW + m, GH + m, drop), pt(-m, GH + m, drop)], '#c9a992', INK, 2);
     // 床
-    s += poly([pt(-m, -m), pt(GW + m, -m), pt(GW + m, GH + m), pt(-m, GH + m)], '#f3ded0', INK, 2);
+    s += poly([pt(-m, -m), pt(GW + m, -m), pt(GW + m, GH + m), pt(-m, GH + m)], '#eddccd', INK, 2);
     // 廊下のタイル目地
     let lines = '';
-    for (let x = 0; x <= GW; x++) lines += '<line x1="' + C.iso(x, -m).x.toFixed(1) + '" y1="' + C.iso(x, -m).y.toFixed(1) +
-      '" x2="' + C.iso(x, GH + m).x.toFixed(1) + '" y2="' + C.iso(x, GH + m).y.toFixed(1) + '"/>';
-    for (let y = 0; y <= GH; y++) lines += '<line x1="' + C.iso(-m, y).x.toFixed(1) + '" y1="' + C.iso(-m, y).y.toFixed(1) +
-      '" x2="' + C.iso(GW + m, y).x.toFixed(1) + '" y2="' + C.iso(GW + m, y).y.toFixed(1) + '"/>';
-    s += '<g stroke="#e4c9b6" stroke-width="1" fill="none">' + lines + '</g>';
+    for (let x = 0; x <= GW; x++) lines += line(x, -m, 0, x, GH + m, 0);
+    for (let y = 0; y <= GH; y++) lines += line(-m, y, 0, GW + m, y, 0);
+    s += '<g stroke="#dcc4b1" stroke-width="1" fill="none">' + lines + '</g>';
+    // 廊下の黄色い区画線
+    s += '<g stroke="#f5c33c" stroke-width="2.4" stroke-dasharray="10 8" fill="none" opacity=".8">' +
+      line(4.5, -m, 0, 4.5, GH + m, 0) + line(-m, 3.5, 0, GW + m, 3.5, 0) + line(-m, 7.5, 0, GW + m, 7.5, 0) +
+      '</g>';
 
-    // 外の木 (工場のまわり)
-    const trees = [[-2.6, 1.5], [-2.2, 6.5], [GW + 2.4, 2.2], [GW + 2.1, 7.6], [3, GH + 2.6], [6.5, -2.6]];
+    const trees = [[-2.6, 1.5], [-2.2, 6.5], [GW + 2.4, 2.2], [GW + 2.1, 7.6], [3, GH + 2.6]];
     for (const t of trees) s += treeMarkup(t[0], t[1]);
     return s;
   }
 
+  function chimneyMarkup(x, y, height) {
+    const w = 30, top = -height;
+    let puffs = '';
+    for (let i = 0; i < 4; i++) {
+      puffs += '<g class="puff" data-phase="' + (i / 4) + '">' +
+        '<circle cx="0" cy="' + (top - 12) + '" r="13" fill="#ffffff" opacity=".82"/></g>';
+    }
+    return at(x, y, 0,
+      '<ellipse cx="0" cy="0" rx="26" ry="11" fill="rgba(90,80,70,.22)"/>' +
+      '<path d="M' + (-w / 2) + ',0 L' + (-w / 2 + 5) + ',' + top + ' L' + (w / 2 - 5) + ',' + top + ' L' + (w / 2) +
+      ',0 Z" fill="#f6ece2" stroke="' + INK + '" stroke-width="2.6" stroke-linejoin="round"/>' +
+      '<path d="M' + (-w / 2 + 3.2) + ',' + (top * 0.72) + ' L' + (w / 2 - 3.2) + ',' + (top * 0.72) +
+      ' L' + (w / 2 - 4.2) + ',' + (top * 0.86) + ' L' + (-w / 2 + 4.2) + ',' + (top * 0.86) +
+      ' Z" fill="#ff9c8f" stroke="' + INK + '" stroke-width="2"/>' +
+      '<ellipse cx="0" cy="' + top + '" rx="' + (w / 2 - 5) + '" ry="5" fill="#c9b6a6" stroke="' + INK + '" stroke-width="2.2"/>' +
+      puffs);
+  }
+
   function treeMarkup(x, y) {
-    const base = C.iso(x, y, 0);
-    return '<g transform="translate(' + base.x.toFixed(1) + ' ' + base.y.toFixed(1) + ')">' +
+    return at(x, y, 0,
       '<ellipse cx="0" cy="0" rx="20" ry="9" fill="rgba(90,110,60,.22)"/>' +
       '<rect x="-4" y="-30" width="8" height="30" rx="3" fill="#b07f57" stroke="' + INK + '" stroke-width="2"/>' +
       '<circle cx="0" cy="-44" r="24" fill="#8fc46a" stroke="' + INK + '" stroke-width="2.4"/>' +
       '<circle cx="-14" cy="-34" r="15" fill="#9ed07a" stroke="' + INK + '" stroke-width="2.4"/>' +
-      '<circle cx="14" cy="-34" r="15" fill="#7fb85e" stroke="' + INK + '" stroke-width="2.4"/>' +
-      '</g>';
+      '<circle cx="14" cy="-34" r="15" fill="#7fb85e" stroke="' + INK + '" stroke-width="2.4"/>');
   }
 
-  /** 部署のなかの機械や家具。部署ごとに見た目を変える。 */
-  function propMarkup(def) {
-    const cx = def.x + def.w / 2;
-    const backY = def.y + 0.45;
+  // ---- ベルトコンベア --------------------------------------------------
+
+  const BELT_H = 13;
+
+  function beltMarkup(def) {
+    const b = C.beltLine(def);
+    const x0 = def.x + b.x0, x1 = def.x + b.x1, by = def.y + b.y;
+    const len = x1 - x0, cx = (x0 + x1) / 2;
     let s = '';
-    switch (def.prop) {
-      case 'pot': {
-        s += isoBox(def.x + 0.9, backY, 1.7, 0.7, 18, '#f6e2cd', '#e3cbb3', '#d5bba2');
-        const p = C.iso(def.x + 0.9, backY, 18);
-        s += '<g transform="translate(' + p.x.toFixed(1) + ' ' + p.y.toFixed(1) + ')">' +
-          '<ellipse cx="0" cy="-10" rx="13" ry="10" fill="#c9d4de" stroke="' + INK + '" stroke-width="2"/>' +
-          '<ellipse cx="0" cy="-14" rx="13" ry="7" fill="#eef3f7" stroke="' + INK + '" stroke-width="2"/>' +
-          '<path d="M-5,-22 q3,-6 0,-10 M5,-22 q3,-6 0,-10" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".7"/>' +
-          '</g>';
-        break;
-      }
-      case 'belt': {
-        s += isoBox(cx, backY, def.w - 1.2, 0.55, 12, '#b9c3cf', '#9aa6b4', '#8d99a8');
-        for (let i = 0; i < 4; i++) {
-          const bx = def.x + 0.9 + i * ((def.w - 1.8) / 3);
-          s += isoBox(bx, backY, 0.34, 0.3, 20, '#ffd98a', '#eab963', '#dcaa56');
-        }
-        break;
-      }
-      case 'scope': {
-        s += isoBox(def.x + 0.9, backY, 1.5, 0.6, 16, '#e6f2e8', '#cfe0d3', '#c2d5c7');
-        const p = C.iso(def.x + 0.9, backY, 16);
-        s += '<g transform="translate(' + p.x.toFixed(1) + ' ' + p.y.toFixed(1) + ')">' +
-          '<circle cx="0" cy="-16" r="10" fill="#dff1ff" stroke="' + INK + '" stroke-width="2.4" opacity=".95"/>' +
-          '<path d="M7,-9 l7,7" stroke="' + INK + '" stroke-width="4" stroke-linecap="round"/></g>';
-        break;
-      }
-      case 'monitor': {
+    // 脚
+    for (let i = 0; i <= 3; i++) {
+      s += isoBox(x0 + (len * i) / 3, by, 0.16, 0.46, BELT_H - 3, '#8d97a6', '#767f8d', '#6b7481');
+    }
+    // 本体
+    s += isoBox(cx, by, len, 0.84, BELT_H, '#6c7586', '#575f6d', '#4c5361');
+    // ローラー
+    const n = Math.max(4, Math.round(len * 3.2));
+    let rollers = '';
+    for (let i = 0; i <= n; i++) {
+      const rx = x0 + (len * i) / n;
+      rollers += line(rx, by - 0.42, BELT_H, rx, by + 0.42, BELT_H);
+    }
+    s += '<g stroke="#98a2b1" stroke-width="1.6" stroke-linecap="round" fill="none">' + rollers + '</g>';
+    return s;
+  }
+
+  const PRODUCTS = {
+    onigiri: '<path d="M0,-15 L9.5,1.5 L-9.5,1.5 Z" fill="#fffaf0" stroke="' + INK +
+      '" stroke-width="2" stroke-linejoin="round"/><rect x="-5" y="-4.5" width="10" height="6" rx="1.5" fill="#5b6b63"/>',
+    gear: '<circle cx="0" cy="-7" r="7.6" fill="#ffd98a" stroke="' + INK + '" stroke-width="2"/>' +
+      '<path d="M0,-16 v3 M0,-1 v3 M-9,-7 h3 M6,-7 h3" stroke="' + INK + '" stroke-width="2.4" stroke-linecap="round"/>' +
+      '<circle cx="0" cy="-7" r="2.4" fill="#fff6e2"/>',
+    box: '<rect x="-8" y="-13" width="16" height="13" rx="2.5" fill="#ffe0bb" stroke="' + INK + '" stroke-width="2"/>' +
+      '<path d="M0,-13 v13 M-8,-8 h16" stroke="' + INK + '" stroke-width="1.4" opacity=".5"/>',
+    yarn: '<circle cx="0" cy="-8" r="8" fill="#ff9ec4" stroke="' + INK + '" stroke-width="2"/>' +
+      '<path d="M-6,-12 q6,4 10,10 M-7,-5 q7,-4 12,-6" fill="none" stroke="#d94f8a" stroke-width="1.6" stroke-linecap="round"/>',
+    crate: '<rect x="-9" y="-14" width="18" height="14" rx="2" fill="#e6b787" stroke="' + INK + '" stroke-width="2"/>' +
+      '<path d="M-9,-14 L9,0 M9,-14 L-9,0" stroke="' + INK + '" stroke-width="1.6" opacity=".55"/>'
+  };
+
+  /** ベルトの上を流れていくもの。 */
+  function beltItems(def) {
+    if (!def.product) return '';
+    const b = C.beltLine(def);
+    const from = C.iso(def.x + b.x0 + 0.2, def.y + b.y, BELT_H);
+    const to = C.iso(def.x + b.x1 - 0.2, def.y + b.y, BELT_H);
+    const dx = (to.x - from.x).toFixed(1), dy = (to.y - from.y).toFixed(1);
+    let s = '';
+    for (let i = 0; i < 3; i++) {
+      s += '<g transform="translate(' + from.x.toFixed(1) + ' ' + from.y.toFixed(1) + ')">' +
+        '<g class="flow" data-dx="' + dx + '" data-dy="' + dy + '" data-phase="' + (i / 3).toFixed(3) + '">' +
+        (PRODUCTS[def.product] || '') + '</g></g>';
+    }
+    return s;
+  }
+
+  /** ベルトのはしに置く機械。部署ごとに見た目を変える。 */
+  function machineMarkup(def) {
+    const b = C.beltLine(def);
+    const by = def.y + b.y;
+    const mx = def.x + 0.7;
+    // 機械は金属の色にして、部署の色は帯だけに使う (大きな面を色で塗ると建物に見えない)
+    let s = isoBox(mx, by, 0.66, 0.86, 24, '#c2ccd8', '#a2adbb', '#8f9aa9');
+    s += isoBox(mx, by, 0.72, 0.92, 11, shade(def.accent, 18), shade(def.accent, -14), shade(def.accent, -30));
+    s += at(mx, by, 24, '<rect x="-11" y="-8" width="22" height="8" rx="2.5" fill="#4a5364" stroke="' + INK +
+      '" stroke-width="1.8"/><circle cx="-5" cy="-4" r="1.9" fill="#8ef0a8"/><circle cx="1" cy="-4" r="1.9" fill="#ffe066"/>');
+
+    switch (def.machine) {
+      case 'kama': {   // 大きな釜。ゆげが上がる
+        let steam = '';
         for (let i = 0; i < 3; i++) {
-          const bx = def.x + 0.9 + i * ((def.w - 1.8) / 2);
-          s += isoBox(bx, backY, 0.9, 0.45, 14, '#cfc9f2', '#b6afe4', '#a9a2db');
-          const p = C.iso(bx, backY, 14);
-          s += '<g transform="translate(' + p.x.toFixed(1) + ' ' + p.y.toFixed(1) + ')">' +
-            '<rect x="-13" y="-24" width="26" height="19" rx="3" fill="#3f4f76" stroke="' + INK + '" stroke-width="2"/>' +
-            '<rect x="-10" y="-21" width="20" height="13" rx="2" fill="#8fd4ff"/></g>';
+          steam += '<g class="puff" data-phase="' + (i / 3).toFixed(2) + '">' +
+            '<ellipse cx="' + (i * 6 - 6) + '" cy="-58" rx="7" ry="6" fill="#fff" opacity=".8"/></g>';
         }
+        s += at(mx, by, 24,
+          '<ellipse cx="0" cy="-16" rx="17" ry="13" fill="#c9d4de" stroke="' + INK + '" stroke-width="2.4"/>' +
+          '<ellipse cx="0" cy="-24" rx="17" ry="8" fill="#eef3f7" stroke="' + INK + '" stroke-width="2.4"/>' +
+          '<ellipse cx="0" cy="-26" rx="4" ry="2.4" fill="#c9d4de" stroke="' + INK + '" stroke-width="1.8"/>' + steam);
         break;
       }
-      case 'crate': {
-        s += isoBox(def.x + 0.85, backY, 0.9, 0.85, 22, '#ffd9a8', '#e9bd88', '#dbaf7c');
-        s += isoBox(def.x + 0.85, backY, 0.75, 0.7, 40, '#ffe6c0', '#eec89b', '#e0ba8e');
-        s += isoBox(def.x + 1.9, backY, 0.9, 0.85, 22, '#ffcfd8', '#eeb2be', '#e0a5b1');
+      case 'press': {  // プレス機。頭が上下する
+        s += at(mx, by, 24,
+          '<path d="M-15,0 v-40 M15,0 v-40 M-17,-40 h34" fill="none" stroke="#8a94a4" stroke-width="5" stroke-linecap="round"/>' +
+          '<g class="press"><rect x="-13" y="-30" width="26" height="12" rx="3" fill="#ff9c8f" stroke="' + INK +
+          '" stroke-width="2.2"/></g>');
         break;
       }
-      case 'sofa': {
-        s += isoBox(cx, backY, def.w - 1.4, 0.7, 12, '#ffb3c4', '#eb95a9', '#dd889c');
-        s += isoBox(cx, backY - 0.28, def.w - 1.4, 0.18, 32, '#ffc9d6', '#eba9b8', '#dd9cab');
+      case 'scanner': { // ベルトをまたぐ検査ゲート
+        const gx = def.x + b.x0 + 0.62;
+        const post = (py) => isoBox(gx, py, 0.2, 0.2, 54, '#dfe7ef', '#b7c3d1', '#a4b1c1');
+        s += post(by - 0.78) + post(by + 0.78);
+        s += poly([pt(gx - 0.1, by - 0.88, 54), pt(gx + 0.1, by - 0.88, 54), pt(gx + 0.1, by + 0.88, 54), pt(gx - 0.1, by + 0.88, 54)], '#eef3f8', INK, 1.8);
+        s += poly([pt(gx + 0.1, by - 0.88, 54), pt(gx + 0.1, by + 0.88, 54), pt(gx + 0.1, by + 0.88, 42), pt(gx + 0.1, by - 0.88, 42)], '#c9d5e2', INK, 1.8);
+        s += at(gx + 0.1, by, 42, '<g class="blink"><ellipse cx="0" cy="-3" rx="30" ry="4.5" fill="#4ddc94" opacity=".75"/></g>');
+        s += at(gx, by - 0.88, 54, '<circle cx="0" cy="-6" r="5" fill="#ff9c8f" stroke="' + INK + '" stroke-width="1.8"/>');
+        break;
+      }
+      case 'spinner': { // 糸車。くるくるまわる
+        s += at(mx, by, 24,
+          '<g class="spin"><circle cx="0" cy="-22" r="17" fill="none" stroke="' + INK + '" stroke-width="2.6"/>' +
+          '<path d="M0,-39 v34 M-17,-22 h34 M-12,-34 l24,24 M12,-34 l-24,24" stroke="#b9a6ff" stroke-width="2.6"/>' +
+          '<circle cx="0" cy="-22" r="4.4" fill="#8a7dff" stroke="' + INK + '" stroke-width="2"/></g>');
+        break;
+      }
+      case 'crane': {  // クレーン。フックがゆれる
+        s += at(mx, by, 24,
+          '<path d="M0,0 v-44 M0,-44 h34" fill="none" stroke="#8a94a4" stroke-width="5" stroke-linecap="round"/>' +
+          '<g class="swing"><path d="M30,-44 v14" stroke="' + INK + '" stroke-width="2"/>' +
+          '<path d="M30,-30 q-6,6 0,10 q6,-4 0,-10" fill="none" stroke="' + INK + '" stroke-width="2.6" stroke-linecap="round"/></g>');
         break;
       }
     }
     return s;
   }
 
-  /** 机 1 つ + 席にすわるねこ。 */
-  function slotMarkup(def, slot, cat) {
+  /** 出来上がったものを積んでおく所。 */
+  function outputMarkup(def) {
+    const ox = def.x + def.w - 0.52;
+    const oy = def.y + def.h - 0.6;
+    const crate = (cx, cy, h) => isoBox(cx, cy, 0.46, 0.46, h, '#e8bd8a', '#cfa273', '#bf9367') +
+      '<g stroke="' + INK + '" stroke-width="1.2" opacity=".45" fill="none">' +
+      line(cx - 0.23, cy - 0.23, h, cx + 0.23, cy + 0.23, h) + '</g>';
+    return crate(ox, oy, 12) + crate(ox, oy, 23) + crate(ox - 0.52, oy - 0.05, 12);
+  }
+
+  /** きゅうけい室。ここだけベルトがなく、くつろぐ場所にする。 */
+  function loungeMarkup(def) {
+    const cx = def.x + def.w / 2, cy = def.y + def.h / 2;
+    let s = poly([pt(cx - 1.4, cy - 0.9), pt(cx + 1.4, cy - 0.9), pt(cx + 1.4, cy + 0.9), pt(cx - 1.4, cy + 0.9)],
+      '#ffd9a8', shade('#ffd9a8', -40), 2);
+    s += isoBox(def.x + 0.8, cy, 0.9, 1.6, 12, '#ffb3c4', '#eb95a9', '#dd889c');
+    s += isoBox(def.x + 0.52, cy, 0.2, 1.6, 30, '#ffc9d6', '#eba9b8', '#dd9cab');
+    s += isoBox(def.x + def.w - 0.8, cy, 0.7, 1.2, 12, '#9fd8c0', '#84c0a8', '#77b199');
+    s += isoBox(cx, cy, 0.8, 0.6, 14, '#fff1d6', '#ecd9b8', '#dfcba9');
+    s += at(cx, cy, 14, '<ellipse cx="0" cy="-6" rx="7" ry="4.6" fill="#fff" stroke="' + INK + '" stroke-width="1.8"/>' +
+      '<path d="M-3,-11 q2,-4 0,-6 M3,-11 q2,-4 0,-6" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" opacity=".8"/>');
+    return s;
+  }
+
+  /** 持ち場に立つねこ 1 ぴき。 */
+  function stationMarkup(def, slot, cat) {
     const sx = def.x + slot.x;
     const sy = def.y + slot.y;
     let s = '';
-    // いす
-    s += isoBox(sx, sy - 0.34, 0.5, 0.42, 8, '#a9b2bf', '#8f98a6', '#848d9b');
-    const chair = C.iso(sx, sy - 0.34, 8);
-    s += '<rect x="' + (chair.x - 12).toFixed(1) + '" y="' + (chair.y - 26).toFixed(1) +
-      '" width="24" height="24" rx="7" fill="#9aa3b1" stroke="' + INK + '" stroke-width="2"/>';
-
-    // ねこ (いすの前)
-    if (cat) {
-      const p = C.iso(sx, sy, 0);
-      const scale = 0.62;
-      s += '<g class="tap-target" data-cat="' + esc(cat.id) + '" transform="translate(' + p.x.toFixed(1) + ' ' +
-        p.y.toFixed(1) + ') scale(' + scale + ')">' +
-        '<ellipse cx="0" cy="0" rx="19" ry="8" fill="rgba(120,80,90,.18)"/>' +
-        '<g class="bob" data-bob="' + (Math.random().toFixed(3)) + '">' + catSVG(cat, def.accent) + '</g></g>';
+    // 足もとの塗り分け (持ち場の目じるし)
+    const p0 = C.iso(sx, sy, 0);
+    s += '<ellipse cx="' + p0.x.toFixed(1) + '" cy="' + p0.y.toFixed(1) +
+      '" rx="20" ry="9" fill="none" stroke="' + def.accent + '" stroke-width="2" opacity=".3"/>';
+    if (!cat) {
+      s += '<ellipse cx="' + p0.x.toFixed(1) + '" cy="' + p0.y.toFixed(1) +
+        '" rx="15" ry="7" fill="rgba(140,110,100,.12)"/>';
+      return s;
     }
-
-    // 机 (ねこの手前)
-    s += isoBox(sx, sy + 0.52, 1.15, 0.62, 15, '#fff6e8', '#ecdcc8', '#dfcdb8');
-    const top = C.iso(sx, sy + 0.52, 15);
-    const gadget = {
-      pot: '<ellipse cx="0" cy="-7" rx="8" ry="5" fill="#ffd9a8" stroke="' + INK + '" stroke-width="1.8"/>',
-      belt: '<rect x="-7" y="-12" width="14" height="10" rx="3" fill="#ffd98a" stroke="' + INK + '" stroke-width="1.8"/>',
-      scope: '<circle cx="0" cy="-9" r="7" fill="#dff1ff" stroke="' + INK + '" stroke-width="1.8"/>',
-      monitor: '<rect x="-9" y="-17" width="18" height="13" rx="2.5" fill="#3f4f76" stroke="' + INK +
-        '" stroke-width="1.8"/><rect x="-6.5" y="-14.6" width="13" height="8" rx="1.5" fill="#8fd4ff"/>',
-      crate: '<rect x="-8" y="-13" width="16" height="11" rx="2" fill="#ffd9a8" stroke="' + INK + '" stroke-width="1.8"/>',
-      sofa: '<ellipse cx="0" cy="-7" rx="7" ry="5" fill="#fff1c9" stroke="' + INK + '" stroke-width="1.8"/>'
-    }[def.prop] || '';
-    s += '<g transform="translate(' + top.x.toFixed(1) + ' ' + top.y.toFixed(1) + ')">' + gadget + '</g>';
+    s += '<g class="tap-target" data-cat="' + esc(cat.id) + '" transform="translate(' + p0.x.toFixed(1) + ' ' +
+      p0.y.toFixed(1) + ') scale(0.58)">' +
+      '<ellipse cx="0" cy="0" rx="20" ry="8.5" fill="rgba(120,80,90,.2)"/>' +
+      '<g class="bob" data-phase="' + Math.random().toFixed(3) + '">' + catSVG(cat, def.accent) + '</g></g>';
     return s;
   }
 
@@ -297,26 +434,31 @@
       s += poly([pt(x0, y0), pt(x1, y0), pt(x1, y1), pt(x0, y1)], unlocked ? '#efe3d6' : '#ddd2c8', INK, 2);
       s += '<polygon points="' + [pt(x0 + .2, y0 + .2), pt(x1 - .2, y0 + .2), pt(x1 - .2, y1 - .2), pt(x0 + .2, y1 - .2)].join(' ') +
         '" fill="none" stroke="' + INK + '" stroke-width="2.5" stroke-dasharray="9 7" opacity=".55"/>';
-      const mid = C.iso(x0 + def.w / 2, y0 + def.h / 2, 0);
-      s += '<g transform="translate(' + mid.x.toFixed(1) + ' ' + mid.y.toFixed(1) + ')">' +
+      s += at(x0 + def.w / 2, y0 + def.h / 2, 0,
         '<text x="0" y="-16" text-anchor="middle" font-size="26">' + (unlocked ? '🔨' : '🔒') + '</text>' +
         '<rect x="-52" y="-6" width="104" height="24" rx="12" fill="#fffaf3" stroke="' + INK + '" stroke-width="2"/>' +
         '<text x="0" y="11" text-anchor="middle" font-size="12" fill="' + INK + '">' +
-        (unlocked ? esc(def.name) : '工場Lv.' + def.unlock + ' で解放') + '</text></g>';
+        (unlocked ? esc(def.name) : '工場Lv.' + def.unlock + ' で解放') + '</text>');
       return s + '</g>';
     }
 
     // 床 (市松)
-    const light = def.floor, dim = shade(def.floor, -14);
-    let tiles = '';
+    const light = def.floor, dim = shade(def.floor, -16);
     for (let x = x0; x < x1; x++) {
       for (let y = y0; y < y1; y++) {
-        tiles += poly([pt(x, y), pt(x + 1, y), pt(x + 1, y + 1), pt(x, y + 1)], ((x + y) % 2 ? dim : light), null);
+        s += poly([pt(x, y), pt(x + 1, y), pt(x + 1, y + 1), pt(x, y + 1)], ((x + y) % 2 ? dim : light), null);
       }
     }
-    s += tiles;
     s += '<polygon points="' + [pt(x0, y0), pt(x1, y0), pt(x1, y1), pt(x0, y1)].join(' ') +
       '" fill="none" stroke="' + INK + '" stroke-width="2"/>';
+
+    // 通路の黄色い線
+    const belt = C.beltLine(def);
+    if (def.kind === 'produce') {
+      s += '<g stroke="#f5c33c" stroke-width="2.6" fill="none" opacity=".85">' +
+        line(x0 + 0.3, def.y + belt.y - 1.22, 0, x1 - 0.3, def.y + belt.y - 1.22, 0) +
+        line(x0 + 0.3, def.y + belt.y + 1.22, 0, x1 - 0.3, def.y + belt.y + 1.22, 0) + '</g>';
+    }
 
     // 奥のかべ 2 枚 (右がわは明るく、左がわは少し暗く)
     const wallR = def.wall, wallL = shade(def.wall, -16);
@@ -326,28 +468,48 @@
     s += poly([pt(x0, y0, W), pt(x1, y0, W), pt(x1, y0 - 0.2, W), pt(x0, y0 - 0.2, W)], shade(def.wall, 12), INK, 1.6);
     s += poly([pt(x0, y0, W), pt(x0, y1, W), pt(x0 - 0.2, y1, W), pt(x0 - 0.2, y0, W)], shade(def.wall, 12), INK, 1.6);
 
-    // かべのかざり (窓とポスター)
-    const win = C.iso(x0 + def.w * 0.72, y0, W * 0.62);
-    s += '<g transform="translate(' + win.x.toFixed(1) + ' ' + win.y.toFixed(1) + ')">' +
-      '<rect x="-16" y="-13" width="32" height="26" rx="4" fill="#cfe9ff" stroke="' + INK + '" stroke-width="2"/>' +
-      '<path d="M-16,0 h32 M0,-13 v26" stroke="' + INK + '" stroke-width="1.6"/></g>';
-    const poster = C.iso(x0, y0 + def.h * 0.62, W * 0.6);
-    s += '<g transform="translate(' + poster.x.toFixed(1) + ' ' + poster.y.toFixed(1) + ')">' +
-      '<rect x="-11" y="-14" width="22" height="28" rx="3" fill="' + shade(def.accent, 70) + '" stroke="' + INK + '" stroke-width="2"/>' +
-      '<text x="0" y="6" text-anchor="middle" font-size="15">' + def.icon + '</text></g>';
+    // かべを走る配管
+    s += '<g stroke="#c3cedb" stroke-width="5" stroke-linecap="round" fill="none">' +
+      line(x0 + 0.15, y0, W - 9, x1 - 0.15, y0, W - 9) +
+      line(x0, y0 + 0.15, W - 15, x0, y1 - 0.15, W - 15) + '</g>';
+    s += '<g stroke="' + INK + '" stroke-width="1.4" fill="none" opacity=".5">' +
+      line(x0 + 0.15, y0, W - 9, x1 - 0.15, y0, W - 9) + '</g>';
+
+    // 窓と、計器のついた制御盤
+    s += at(x0 + def.w * 0.74, y0, W * 0.55,
+      '<rect x="-17" y="-13" width="34" height="26" rx="4" fill="#cfe9ff" stroke="' + INK + '" stroke-width="2"/>' +
+      '<path d="M-17,0 h34 M0,-13 v26" stroke="' + INK + '" stroke-width="1.6"/>');
+    s += at(x0, y0 + def.h * 0.6, W * 0.5,
+      '<rect x="-13" y="-15" width="26" height="30" rx="3" fill="' + shade(def.accent, 74) + '" stroke="' + INK + '" stroke-width="2"/>' +
+      '<circle cx="-5" cy="-7" r="4.4" fill="#fffaf3" stroke="' + INK + '" stroke-width="1.6"/>' +
+      '<circle cx="5" cy="-7" r="4.4" fill="#fffaf3" stroke="' + INK + '" stroke-width="1.6"/>' +
+      '<path d="M-5,-7 l2,-3 M5,-7 l-1,-3.4" stroke="' + INK + '" stroke-width="1.4" stroke-linecap="round"/>' +
+      '<rect x="-8" y="2" width="16" height="8" rx="2" fill="#4a5364"/>' +
+      '<circle cx="-4" cy="6" r="1.8" fill="#8ef0a8"/><circle cx="1" cy="6" r="1.8" fill="#ffe066"/>');
 
     // 部屋番号のプレート
-    const plate = C.iso(x0 + def.w * 0.26, y0, W * 0.34);
-    s += '<g transform="translate(' + plate.x.toFixed(1) + ' ' + plate.y.toFixed(1) + ')">' +
+    s += at(x0 + def.w * 0.3, y0, W * 0.68,
       '<rect x="-20" y="-10" width="40" height="20" rx="5" fill="#fffaf3" stroke="' + INK + '" stroke-width="2"/>' +
-      '<text x="0" y="6" text-anchor="middle" font-size="13" fill="' + INK + '">' + ROOM_NO[def.id] + '</text></g>';
+      '<text x="0" y="6" text-anchor="middle" font-size="13" fill="' + INK + '">' + ROOM_NO[def.id] + '</text>');
 
-    s += propMarkup(def);
-
-    // 机とねこ。奥から手前へ並べないと重なりが逆になる
-    const slots = C.slotPositions(def).slice().sort((a, b) => (a.x + a.y) - (b.x + b.y));
+    // 中身。奥がわのねこ → ベルト → 手前がわのねこ の順に重ねる
+    const slots = C.slotPositions(def);
     const cats = C.catsIn(state, def.id);
-    slots.forEach((slot, i) => { s += slotMarkup(def, slot, cats[i] || null); });
+    const back = [], front = [];
+    slots.forEach((slot, i) => { (slot.side < 0 ? back : front).push({ slot: slot, cat: cats[i] || null }); });
+    const byX = (a, b) => a.slot.x - b.slot.x;
+
+    if (def.kind === 'produce') {
+      s += machineMarkup(def);
+      s += back.sort(byX).map((it) => stationMarkup(def, it.slot, it.cat)).join('');
+      s += beltMarkup(def);
+      s += beltItems(def);
+      s += front.sort(byX).map((it) => stationMarkup(def, it.slot, it.cat)).join('');
+      s += outputMarkup(def);
+    } else {
+      s += loungeMarkup(def);
+      s += back.sort(byX).concat(front.sort(byX)).map((it) => stationMarkup(def, it.slot, it.cat)).join('');
+    }
 
     return s + '</g>';
   }
@@ -374,16 +536,57 @@
     startBobbing();
   }
 
-  /** ねこのゆらゆら。CSS ではなく Web Animations API を使う (途中の状態を飛ばさないため)。 */
+  /**
+   * 動くものをまとめて動かす。CSS の animation ではなく
+   * Web Animations API を使う (同じフレームで作った要素でも 1 フレーム目から動く)。
+   */
   function startBobbing() {
     if (reduceMotion) return;
-    const list = els.rooms.querySelectorAll('.bob');
-    for (const g of list) {
-      const phase = Number(g.dataset.bob || 0);
-      g.animate(
-        [{ transform: 'translateY(0px)' }, { transform: 'translateY(-3.5px)' }, { transform: 'translateY(0px)' }],
-        { duration: 1700 + phase * 900, iterations: Infinity, delay: -phase * 1700, easing: 'ease-in-out' }
-      );
+    const root = els.rooms;
+    const phaseOf = (el) => Number(el.dataset.phase || 0);
+
+    // ねこのゆらゆら
+    for (const g of root.querySelectorAll('.bob')) {
+      const dur = 1700 + phaseOf(g) * 900;
+      g.animate([{ transform: 'translateY(0px)' }, { transform: 'translateY(-3.5px)' }, { transform: 'translateY(0px)' }],
+        { duration: dur, iterations: Infinity, delay: -phaseOf(g) * dur, easing: 'ease-in-out' });
+    }
+    // ベルトを流れるもの
+    for (const g of root.querySelectorAll('.flow')) {
+      const dx = Number(g.dataset.dx || 0), dy = Number(g.dataset.dy || 0);
+      const dur = 5200;
+      g.animate([{ transform: 'translate(0px,0px)' }, { transform: 'translate(' + dx + 'px,' + dy + 'px)' }],
+        { duration: dur, iterations: Infinity, delay: -phaseOf(g) * dur, easing: 'linear' });
+    }
+    // 煙とゆげ
+    for (const g of root.parentNode.querySelectorAll('.puff')) {
+      const dur = 3200;
+      g.animate([
+        { transform: 'translateY(6px) scale(.4)', opacity: 0 },
+        { transform: 'translateY(-10px) scale(.9)', opacity: .75, offset: .3 },
+        { transform: 'translateY(-46px) scale(1.6)', opacity: 0 }
+      ], { duration: dur, iterations: Infinity, delay: -phaseOf(g) * dur, easing: 'ease-out' });
+    }
+    // プレス機
+    for (const g of root.querySelectorAll('.press')) {
+      g.animate([{ transform: 'translateY(0px)' }, { transform: 'translateY(16px)', offset: .45 },
+        { transform: 'translateY(16px)', offset: .55 }, { transform: 'translateY(0px)' }],
+        { duration: 1600, iterations: Infinity, easing: 'ease-in-out' });
+    }
+    // 糸車
+    for (const g of root.querySelectorAll('.spin')) {
+      g.animate([{ transform: 'rotate(0deg)' }, { transform: 'rotate(360deg)' }],
+        { duration: 4200, iterations: Infinity, easing: 'linear' });
+    }
+    // クレーンのフック
+    for (const g of root.querySelectorAll('.swing')) {
+      g.animate([{ transform: 'translateY(0px)' }, { transform: 'translateY(10px)' }, { transform: 'translateY(0px)' }],
+        { duration: 2600, iterations: Infinity, easing: 'ease-in-out' });
+    }
+    // 検査ゲートの光
+    for (const g of root.querySelectorAll('.blink')) {
+      g.animate([{ opacity: .25 }, { opacity: 1 }, { opacity: .25 }],
+        { duration: 1400, iterations: Infinity, easing: 'ease-in-out' });
     }
   }
 
@@ -433,7 +636,7 @@
     const b = C.sceneBounds();
     const a = viewport();
     const fit = Math.min(a.w / b.w, a.h / b.h);
-    cam.s = clamp((a.h / b.h) * 0.8, fit, 1.6);
+    cam.s = clamp((a.h / b.h) * 0.92, fit, 1.7);
     const built = C.builtRooms(state);
     const list = built.length ? built : C.ROOMS;
     let cx = 0, cy = 0;
@@ -711,6 +914,7 @@
   let sheet = null;   // { kind, arg }
   let buyAmount = 1;  // 1 / 10 / 'max'
   let openedAt = 0;
+  let lastGacha = null;   // 直前に引いたねこ。板を描き直しても消えないよう、ここに持つ
 
   /**
    * 指でタップすると、ブラウザはそのあとに click も送る。
@@ -720,6 +924,7 @@
   function justOpened() { return Date.now() - openedAt < 400; }
 
   function openSheet(kind, arg) {
+    if (kind === 'gacha') lastGacha = null;
     sheet = { kind: kind, arg: arg };
     openedAt = Date.now();
     els.sheetWrap.hidden = false;
@@ -803,11 +1008,11 @@
             ? '<button type="button" class="cat-card" data-cat-open="' + esc(cat.id) + '">' + rarityChip(cat) +
               '<span class="lv">' + cat.level + '</span>' + catPortrait(cat, 46) +
               '<div class="nm">' + esc(cat.name) + '</div><div class="rm">力 ' + C.catPower(cat).toFixed(2) + '</div></button>'
-            : '<div class="cat-card idle" style="cursor:default"><div style="font-size:30px;line-height:46px">🪑</div>' +
+            : '<div class="cat-card idle" style="cursor:default"><div style="font-size:28px;line-height:46px">🧰</div>' +
               '<div class="nm">あき</div><div class="rm">—</div></div>');
         }
         return '<p class="note">' + esc(def.about) + '</p>' + roomCard(def) +
-          '<div class="card-sub" style="padding-left:4px">はたらいているねこ（ねこをタップすると育てられる）</div>' +
+          '<div class="card-sub" style="padding-left:4px">ラインに立っているねこ（タップすると育てられる）</div>' +
           '<div class="grid">' + seats.join('') + '</div>';
       }
     },
@@ -842,7 +1047,7 @@
           if (C.roomLevel(state, def.id) <= 0) return '';
           const full = C.catsIn(state, def.id).length >= def.slots && cat.room !== def.id;
           return '<option value="' + def.id + '"' + (cat.room === def.id ? ' selected' : '') +
-            (full ? ' disabled' : '') + '>' + def.icon + ' ' + def.name + (full ? '（満席）' : '') + '</option>';
+            (full ? ' disabled' : '') + '>' + def.icon + ' ' + def.name + (full ? '（いっぱい）' : '') + '</option>';
         })).join('');
         return '<div style="display:flex;gap:12px;align-items:center">' + catPortrait(cat, 92) +
           '<div class="card-main"><div class="card-title">' + esc(cat.name) +
@@ -860,7 +1065,13 @@
     gacha: {
       title: () => '🎁 ねこガチャ',
       body: () => {
-        return '<div id="gachaResult"></div>' +
+        const result = lastGacha
+          ? '<div class="result-row">' + lastGacha.map((cat) =>
+            '<button type="button" class="cat-card" style="width:84px" data-cat-open="' + esc(cat.id) + '">' +
+            rarityChip(cat) + catPortrait(cat, 46) + '<div class="nm">' + esc(cat.name) + '</div>' +
+            '<div class="rm">' + C.rarityDef(cat.rarity).name + '</div></button>').join('') + '</div>'
+          : '';
+        return '<div id="gachaResult">' + result + '</div>' +
           '<button type="button" class="big-btn" data-gacha="1"' + (state.paw >= C.GACHA_COST ? '' : ' disabled') +
           '>1 かい引く<small>🐾 ' + C.GACHA_COST + '</small></button>' +
           '<button type="button" class="big-btn alt" data-gacha="10"' + (state.paw >= C.GACHA_COST_10 ? '' : ' disabled') +
@@ -951,20 +1162,15 @@
     if (g) {
       const got = C.gacha(state, Number(g.dataset.gacha), rng);
       if (got) {
+        lastGacha = got;
         afterChange();
         renderSheet();
         const box = document.getElementById('gachaResult');
-        if (box) {
-          box.innerHTML = '<div class="result-row">' + got.map((cat) =>
-            '<button type="button" class="cat-card" style="width:84px" data-cat-open="' + esc(cat.id) + '">' +
-            rarityChip(cat) + catPortrait(cat, 46) + '<div class="nm">' + esc(cat.name) + '</div>' +
-            '<div class="rm">' + C.rarityDef(cat.rarity).name + '</div></button>').join('') + '</div>';
-          if (!reduceMotion) {
-            box.querySelectorAll('.cat-card').forEach((node, i) => {
-              node.animate([{ transform: 'scale(.2)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }],
-                { duration: 380, delay: i * 70, easing: 'cubic-bezier(.2,1.4,.4,1)', fill: 'backwards' });
-            });
-          }
+        if (box && !reduceMotion) {
+          box.querySelectorAll('.cat-card').forEach((node, i) => {
+            node.animate([{ transform: 'scale(.2)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }],
+              { duration: 380, delay: i * 70, easing: 'cubic-bezier(.2,1.4,.4,1)', fill: 'backwards' });
+          });
         }
         const best = got.reduce((a, b) => (C.catPower(b) > C.catPower(a) ? b : a));
         if (best.rarity !== 'N') toast('✨ ' + C.rarityDef(best.rarity).name + 'の ' + best.name + ' がなかまになった！');
@@ -984,7 +1190,7 @@
     const sel = e.target.closest('[data-assign]');
     if (!sel) return;
     const ok = C.assignCat(state, sel.dataset.assign, sel.value || null);
-    if (!ok) toast('その部署はもう満席です');
+    if (!ok) toast('その部署の持ち場はもういっぱいです');
     afterChange();
     renderSheet();
   }
@@ -1161,6 +1367,7 @@
       closeSheet: closeSheet,
       buildScene: buildScene,
       fitCam: fitCam,
+      lookAt: lookAt,
       spawnBubble: spawnBubble,
       bubbles: () => bubbles,
       save: save,

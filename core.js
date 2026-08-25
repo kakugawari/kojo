@@ -33,52 +33,67 @@
   const GAME_MIN_PER_SEC = 1;
   const START_GAME_MIN = 9 * 60;
 
-  /** 部署。x,y,w,h は升目の座標。ここを直せば間取りが変わる。 */
+  /**
+   * 部署。x,y,w,h は升目の座標。ここを直せば間取りが変わる。
+   * machine = 部屋のはしに置く機械、product = ベルトを流れてくるもの。
+   */
   const ROOMS = [
     {
-      id: 'kitchen', short: 'きゅうしょく', name: 'きゅうしょく室', icon: '🍚', kind: 'produce',
+      id: 'gohan', short: 'ごはん', name: 'ごはん工房', icon: '🍙', kind: 'produce',
       x: 0, y: 0, w: 4, h: 3, slots: 3, unlock: 1,
       baseRate: 2, baseCost: 30, growth: 1.13,
-      floor: '#ffe3c2', wall: '#fff6ea', accent: '#ff9c5b', prop: 'pot',
-      about: 'にぼしごはんを作る。ねこ工場のはじまり。'
+      floor: '#ffe0b8', wall: '#fff6ea', accent: '#ff9c5b',
+      machine: 'kama', product: 'onigiri',
+      about: 'おおきな釜でにぼしごはんをたいて、ベルトの上でおにぎりにする。'
     },
     {
-      id: 'line', short: 'くみたて', name: 'くみたてライン', icon: '🔧', kind: 'produce',
+      id: 'kumitate', short: 'くみたて', name: 'くみたてライン', icon: '🔧', kind: 'produce',
       x: 5, y: 0, w: 4, h: 3, slots: 4, unlock: 4,
       baseRate: 18, baseCost: 420, growth: 1.135,
-      floor: '#d8ecff', wall: '#f0f8ff', accent: '#4aa8ff', prop: 'belt',
-      about: 'ねこじゃらしを組み立てる。ライン作業はねこの得意分野。'
+      floor: '#cde5ff', wall: '#f0f8ff', accent: '#4aa8ff',
+      machine: 'press', product: 'gear',
+      about: 'プレス機が打ち出した部品を、流れてくるそばから組み立てる。'
     },
     {
-      id: 'qa', short: 'けんぴん', name: 'けんぴん室', icon: '🔍', kind: 'produce',
+      id: 'kenpin', short: 'けんぴん', name: 'けんぴんライン', icon: '🔍', kind: 'produce',
       x: 0, y: 4, w: 4, h: 3, slots: 4, unlock: 12,
       baseRate: 160, baseCost: 7800, growth: 1.14,
-      floor: '#dff4e4', wall: '#f0fbf3', accent: '#48c184', prop: 'scope',
-      about: 'ひとつずつ手でさわって確かめる。ねこの手はセンサーより正確。'
+      floor: '#d4f0dc', wall: '#f0fbf3', accent: '#48c184',
+      machine: 'scanner', product: 'box',
+      about: 'ゲートをくぐった品を、ひとつずつ肉球でさわって確かめる。'
     },
     {
-      id: 'dev', short: 'かいはつ', name: 'かいはつ室', icon: '💻', kind: 'produce',
+      id: 'keito', short: 'けいと', name: 'けいと工房', icon: '🧶', kind: 'produce',
       x: 5, y: 4, w: 4, h: 3, slots: 5, unlock: 26,
       baseRate: 1400, baseCost: 145000, growth: 1.145,
-      floor: '#e6e2ff', wall: '#f4f2ff', accent: '#8a7dff', prop: 'monitor',
-      about: '次の商品を考える。だいたい寝ているが、たまにひらめく。'
+      floor: '#e0dbff', wall: '#f4f2ff', accent: '#8a7dff',
+      machine: 'spinner', product: 'yarn',
+      about: '糸車をぐるぐるまわして毛糸玉を巻く。だいたい糸まみれになる。'
     },
     {
-      id: 'ship', short: 'しゅっか', name: 'しゅっか場', icon: '📦', kind: 'produce',
+      id: 'shukka', short: 'しゅっか', name: 'しゅっか場', icon: '📦', kind: 'produce',
       x: 0, y: 8, w: 4, h: 3, slots: 5, unlock: 46,
       baseRate: 13000, baseCost: 2600000, growth: 1.15,
-      floor: '#ffe0ea', wall: '#fff0f5', accent: '#ff6f9c', prop: 'crate',
-      about: '箱につめて送り出す。ねこは箱に入りたがるので人手には困らない。'
+      floor: '#ffd7e5', wall: '#fff0f5', accent: '#ff6f9c',
+      machine: 'crane', product: 'crate',
+      about: 'クレーンで箱をつり上げて、トラックへ積む。ねこは箱に入りたがる。'
     },
     {
-      id: 'lounge', short: 'きゅうけい', name: 'きゅうけい室', icon: '🛋️', kind: 'boost',
+      id: 'kyukei', short: 'きゅうけい', name: 'きゅうけい室', icon: '🛋️', kind: 'boost',
       x: 5, y: 8, w: 4, h: 3, slots: 6, unlock: 72,
       baseRate: 0, baseCost: 40000000, growth: 1.16,
       boostPerLevel: 0.03,
-      floor: '#fff2cc', wall: '#fffaea', accent: '#ffc53d', prop: 'sofa',
+      floor: '#ffefc2', wall: '#fffaea', accent: '#ffc53d',
+      machine: 'sofa', product: null,
       about: 'ここで昼寝したねこは、工場ぜんたいのもうけを上げる。'
     }
   ];
+
+  /** 前の版のセーブを、今の部署の名前に読みかえる。 */
+  const OLD_ROOM_IDS = {
+    kitchen: 'gohan', line: 'kumitate', qa: 'kenpin',
+    dev: 'keito', ship: 'shukka', lounge: 'kyukei'
+  };
 
   /** 部署のない廊下も含めた升目の広さ。 */
   const GRID = { w: 9, h: 11 };
@@ -484,7 +499,7 @@
       rewardedLevel: 0,
       lastSeen: Date.now()
     };
-    s.rooms.kitchen = 1;
+    s.rooms.gohan = 1;
     const rng = mulberry32(s.seed);
     addCat(s, newCat(rng));
     s.rewardedLevel = factoryLevel(s);
@@ -519,18 +534,21 @@
 
     s.rooms = {};
     if (raw.rooms && typeof raw.rooms === 'object') {
+      const rooms = {};
+      for (const key of Object.keys(raw.rooms)) rooms[OLD_ROOM_IDS[key] || key] = raw.rooms[key];
       for (const def of ROOMS) {
-        const level = raw.rooms[def.id];
+        const level = rooms[def.id];
         if (Number.isFinite(level) && level > 0) s.rooms[def.id] = Math.floor(level);
       }
     }
-    if (!builtRooms(s).length) s.rooms.kitchen = 1;
+    if (!builtRooms(s).length) s.rooms.gohan = 1;
 
     s.cats = [];
     if (Array.isArray(raw.cats)) {
       for (const c of raw.cats) {
         if (!c || typeof c.id !== 'string') continue;
-        const room = roomDef(c.room) && s.rooms[c.room] > 0 ? c.room : null;
+        const moved = OLD_ROOM_IDS[c.room] || c.room;
+        const room = roomDef(moved) && s.rooms[moved] > 0 ? moved : null;
         s.cats.push({
           id: c.id,
           name: typeof c.name === 'string' ? c.name : NAMES[0],
@@ -635,23 +653,29 @@
     return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
   }
 
+  /** ベルトコンベアが通る位置。持ち場と同じく、部屋の左上からの相対座標。 */
+  function beltLine(def) {
+    return { y: def.h / 2, x0: 1.35, x1: def.w - 0.55 };
+  }
+
   /**
-   * 部署のなかの席の位置 (升目の相対座標)。
+   * 持ち場の位置 (升目の相対座標)。ベルトをはさんで両側に立つ。
+   * side が -1 なら奥がわ、+1 なら手前がわ。
    * 数がいくつでも部屋からはみ出さないように、幅から割り出す。
    */
   function slotPositions(def) {
     const n = def.slots;
     const cols = Math.ceil(n / 2);
-    const rows = n <= 1 ? 1 : 2;
+    const midY = def.h / 2;
+    const gap = Math.min(0.95, midY - 0.35);
     const out = [];
-    const padX = 0.55;
-    const padY = 0.6;
     for (let i = 0; i < n; i++) {
       const col = i % cols;
-      const row = Math.floor(i / cols);
+      const side = i < cols ? -1 : 1;
       out.push({
-        x: padX + (def.w - padX * 2) * (cols === 1 ? 0.5 : col / (cols - 1)),
-        y: padY + (def.h - padY * 2) * (rows === 1 ? 0.5 : row / (rows - 1))
+        x: 1.35 + (def.w - 2.05) * (cols === 1 ? 0.5 : col / (cols - 1)),
+        y: midY + side * gap,
+        side: side
       });
     }
     return out;
@@ -727,6 +751,7 @@
     iso: iso,
     isoPoly: isoPoly,
     sceneBounds: sceneBounds,
+    beltLine: beltLine,
     slotPositions: slotPositions
   };
 });

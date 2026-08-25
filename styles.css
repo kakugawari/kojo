@@ -78,6 +78,10 @@ body {
 
 .tap-target { cursor: pointer; }
 
+/* 回すものは、その絵の真ん中を軸にする。
+   SVG のままだと transform の軸が SVG 全体の原点になってしまう */
+.spin { transform-box: fill-box; transform-origin: 50% 50%; }
+
 /* ------------------------------------------------------------ 上のバー */
 
 #hud {
