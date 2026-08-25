@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>ねこ工場</title>
+<meta name="description" content="かわいいねこたちが働く工場を大きくしていくゲーム">
+<meta name="theme-color" content="#f7d9a6">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./icon-180.png">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<div id="app" data-phase="day">
+
+  <!-- 工場そのもの。ここだけが指で動かせる -->
+  <div id="scene">
+    <svg id="world" aria-label="ねこ工場">
+      <defs id="worldDefs">
+        <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="var(--sky-1)"></stop>
+          <stop offset="32%" stop-color="var(--sky-2)"></stop>
+          <stop offset="48%" stop-color="var(--ground)"></stop>
+          <stop offset="100%" stop-color="var(--ground-2)"></stop>
+        </linearGradient>
+      </defs>
+      <rect id="sky" x="0" y="0" width="100%" height="100%" fill="url(#skyGrad)"></rect>
+      <g id="camera">
+        <g id="layerGround"></g>
+        <g id="layerRooms"></g>
+      </g>
+      <g id="layerSigns"></g>
+      <g id="layerFx"></g>
+      <rect id="tint" x="0" y="0" width="100%" height="100%" fill="var(--tint)" pointer-events="none"></rect>
+    </svg>
+  </div>
+
+  <!-- 上のバー -->
+  <header id="hud">
+    <div id="lvBadge" class="lv-badge" title="工場レベル">
+      <span id="lvValue">1</span>
+    </div>
+    <div class="hud-stack">
+      <div class="pill-row">
+        <div class="pill pill-money"><span class="pill-ico">💴</span><b id="money">0</b></div>
+        <div class="pill pill-paw"><span class="pill-ico">🐾</span><b id="paw">0</b></div>
+      </div>
+      <div class="pill-row">
+        <div class="pill pill-rate"><span class="pill-ico">📈</span><b id="rate">0</b><span class="pill-unit">/10s</span></div>
+        <div class="pill pill-clock"><span class="pill-ico" id="clockIco">☀️</span><b id="clock">09:00</b></div>
+        <button type="button" class="pill pill-btn" id="btnSettings" aria-label="せってい">⚙️</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 下のバー -->
+  <nav id="dock" aria-label="メニュー">
+    <button type="button" class="dock-btn" data-panel="rooms">
+      <span class="dock-ico">🏭</span><span class="dock-label">ぶしょ</span><i class="dot" hidden></i>
+    </button>
+    <button type="button" class="dock-btn" data-panel="cats">
+      <span class="dock-ico">🐱</span><span class="dock-label">ねこ</span><i class="dot" hidden></i>
+    </button>
+    <button type="button" class="dock-btn" data-panel="gacha">
+      <span class="dock-ico">🎁</span><span class="dock-label">ガチャ</span><i class="dot" hidden></i>
+    </button>
+    <button type="button" class="dock-btn" data-panel="awards">
+      <span class="dock-ico">🏆</span><span class="dock-label">じっせき</span><i class="dot" hidden></i>
+    </button>
+  </nav>
+
+  <!-- 下から出てくる板 -->
+  <div id="sheetWrap" hidden>
+    <div id="sheetBack"></div>
+    <section id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+      <div class="sheet-head">
+        <h2 id="sheetTitle">—</h2>
+        <button type="button" id="sheetClose" class="round-btn" aria-label="とじる">✕</button>
+      </div>
+      <div id="sheetBody" class="sheet-body"></div>
+    </section>
+  </div>
+
+  <!-- おかえりなさい など -->
+  <div id="modalWrap" hidden>
+    <div class="modal-back"></div>
+    <section id="modal" role="dialog" aria-modal="true"></section>
+  </div>
+
+  <div id="toasts" aria-live="polite"></div>
+</div>
+
+<script src="./core.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>
