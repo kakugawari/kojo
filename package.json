@@ -1,7 +1,7 @@
 {
-  "name": "neko-irairabou",
+  "name": "irairabou-factory",
   "version": "1.0.0",
-  "description": "ねこイライラ棒 — 輪っかをカベに当てずにゴールまで運ぶゲーム",
+  "description": "イライラ棒工場 — 検査ラインでユニットを通すゲーム",
   "private": true,
   "scripts": {
     "start": "node serve.js",

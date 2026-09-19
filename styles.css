@@ -1,20 +1,22 @@
-/* ねこイライラ棒の見た目。
-   盤の上でずっと遊ぶゲームなので、暗い盤 + 明るいコース の 1 本だけに絞る。
+/* イライラ棒工場の見た目。
+   工場の検査ラインという世界なので、鉄板の色 + 注意色 の 1 本だけに絞る。
    明るい画面/暗い画面のどちらで開いても同じ色になるよう、色は全部ここで決める。 */
 
 :root {
-  --ink: #231a35;          /* 盤の地色 */
-  --ink-2: #2e2445;
-  --paper: #fff6e8;        /* コースの床 */
-  --text: #fff2e0;
-  --muted: #b3a4c9;
-  --wall: #ff3d71;         /* カベ = さわったら終わり */
-  --wall-dim: rgba(255, 61, 113, .3);
+  --ink: #12151d;          /* 工場の床 (盤の外) */
+  --ink-2: #212736;        /* パネルや板 */
+  --steel: #262d3d;        /* 検査台のプレート */
+  --edge: #49546b;
+  --paper: #f0ece2;        /* コースのみぞの底 */
+  --text: #eef2f8;
+  --muted: #98a3b8;
+  --wall: #ff3d5f;         /* 外わく = 触れたらショート */
+  --wall-dim: rgba(255, 61, 95, .3);
   --hazard: #ffd23f;
   --start: #4ade80;
   --goal: #ffd23f;
-  --stick: #e0a869;
-  --ok: #7ee7a8;
+  --metal: #dfe6f0;
+  --ok: #5be59a;
   color-scheme: dark;
 }
 
@@ -57,6 +59,7 @@ body {
 }
 
 #bg { fill: var(--ink); }
+#panel { pointer-events: none; }
 
 #course .glow { fill: none; stroke: var(--wall-dim); stroke-linecap: round; stroke-linejoin: round; }
 #course .wall { fill: none; stroke: var(--wall); stroke-linecap: round; stroke-linejoin: round; }
@@ -75,8 +78,10 @@ body {
 .haz-back { stroke: #1a1428; stroke-linecap: round; fill: none; }
 .haz-face { stroke: var(--hazard); stroke-linecap: round; fill: none; }
 
-#stick { stroke: #7a5230; stroke-width: 13; stroke-linecap: round; }
-#stickTop { stroke: var(--stick); stroke-width: 8; stroke-linecap: round; }
+/* テスト棒。太い下じき → 金属 → 手もとのゴムグリップ の順に重ねる */
+#rodBack { stroke: #11141c; stroke-width: 15; stroke-linecap: round; }
+#rod { stroke: #b9c2cf; stroke-width: 8.5; stroke-linecap: round; }
+#handle { stroke: #333b4d; stroke-width: 15; stroke-linecap: round; }
 
 #app[data-mode="ready"] #player { opacity: .92; }
 
@@ -98,8 +103,8 @@ body {
   align-items: center;
   gap: 4px;
   padding: 6px 10px;
-  border-radius: 999px;
-  background: rgba(46, 36, 69, .92);
+  border-radius: 10px;
+  background: rgba(33, 39, 54, .94);
   border: 2px solid rgba(255, 255, 255, .16);
   font-size: 12px;
   line-height: 1.2;
@@ -107,8 +112,8 @@ body {
   color: var(--text);
 }
 .chip b { font-variant-numeric: tabular-nums; font-weight: 900; }
-.chip-name { flex: 1 1 auto; min-width: 0; overflow: hidden; }
-.chip-name b { overflow: hidden; text-overflow: ellipsis; }
+.chip-name { flex: 1 1 auto; min-width: 0; overflow: hidden; padding: 6px 8px; }
+.chip-name b { font-size: 11.5px; letter-spacing: .02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chip-time b { font-size: 14px; }
 .chip-best { color: var(--hazard); }
 .chip-btn {
@@ -160,7 +165,7 @@ body {
   max-width: 300px;
   padding: 18px 20px 16px;
   border-radius: 22px;
-  background: rgba(35, 26, 53, .96);
+  background: rgba(24, 29, 40, .97);
   border: 3px solid rgba(255, 255, 255, .2);
   box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
   display: flex;
@@ -168,7 +173,20 @@ body {
   gap: 10px;
   align-items: center;
 }
-.panel h2 { margin: 0; font-size: 20px; font-weight: 900; }
+.panel h2 { margin: 0; font-size: 19px; font-weight: 900; letter-spacing: .04em; }
+.panel.ng { border-color: var(--wall); }
+/* 合格のはんこ */
+.stamp {
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: .12em;
+  color: var(--ok);
+  border: 4px solid var(--ok);
+  border-radius: 12px;
+  padding: 4px 16px 6px;
+  transform: rotate(-7deg);
+  opacity: .95;
+}
 .panel .big { font-size: 34px; font-weight: 900; font-variant-numeric: tabular-nums; color: var(--hazard); }
 .panel p { margin: 0; font-size: 12.5px; line-height: 1.9; color: var(--muted); }
 .panel .emoji { font-size: 40px; line-height: 1; }
@@ -176,7 +194,7 @@ body {
 .hint {
   padding: 9px 16px;
   border-radius: 999px;
-  background: rgba(35, 26, 53, .92);
+  background: rgba(24, 29, 40, .94);
   border: 2px solid rgba(255, 255, 255, .18);
   font-size: 13px;
   pointer-events: none;
@@ -206,7 +224,7 @@ body {
 
 #sheetWrap { position: absolute; inset: 0; z-index: 20; }
 #sheetWrap[hidden] { display: none; }
-#sheetBack { position: absolute; inset: 0; background: rgba(10, 6, 20, .6); }
+#sheetBack { position: absolute; inset: 0; background: rgba(6, 8, 14, .66); }
 
 #sheet {
   position: absolute;
@@ -215,7 +233,7 @@ body {
   display: flex;
   flex-direction: column;
   background: var(--ink-2);
-  border-top: 3px solid rgba(255, 255, 255, .2);
+  border-top: 3px solid var(--edge);
   border-radius: 22px 22px 0 0;
   padding-bottom: env(safe-area-inset-bottom);
 }
@@ -258,8 +276,8 @@ body {
   align-items: center;
   gap: 12px;
   padding: 11px 14px;
-  border-radius: 16px;
-  border: 2px solid rgba(255, 255, 255, .16);
+  border-radius: 12px;
+  border: 2px solid rgba(255, 255, 255, .14);
   background: rgba(255, 255, 255, .05);
   color: var(--text);
   font: inherit;
@@ -273,11 +291,12 @@ body {
   flex: none;
   width: 30px; height: 30px;
   display: grid; place-items: center;
-  border-radius: 50%;
+  border-radius: 8px;
   background: rgba(255, 255, 255, .12);
   font-size: 13px; font-weight: 900;
 }
-.stage-row .nm { flex: 1 1 auto; font-size: 14px; font-weight: 900; }
+.stage-row .nm { flex: 1 1 auto; font-size: 14px; font-weight: 900; letter-spacing: .03em; }
+.stage-row .dim { color: var(--muted); font-weight: 700; }
 .stage-row .sub { font-size: 11px; color: var(--muted); font-weight: 700; margin-top: 2px; }
 .stage-row .rec { flex: none; font-size: 13px; font-weight: 900; color: var(--hazard); font-variant-numeric: tabular-nums; }
 

@@ -160,11 +160,11 @@ async function run() {
     }));
     ok(after.best > 0, `タイムが記録される (${Math.round(after.best)}ms)`);
     ok(after.unlocked === 2, `クリアするとつぎのステージがひらく (${after.unlocked})`);
-    ok(after.panel.includes('ゴール'), `クリア画面が出る (${after.panel})`);
+    ok(after.panel.includes('出荷'), `合格の画面が出る (${after.panel})`);
     ok(after.shown !== '--.--', `自己ベストが上に出る (${after.shown})`);
 
     // ------------------------------------------------ カベ
-    section('カベ');
+    section('外わく');
     await phone.evaluate(() => window.__app.unlockAll());
     await phone.evaluate(() => window.__app.selectStage(0));
     await phone.waitForTimeout(120);
@@ -184,13 +184,13 @@ async function run() {
     await phone.mouse.move(wallPts.start.x, wallPts.start.y);
     await phone.mouse.down();
     const started = await phone.evaluate(() => window.__app.mode());
-    ok(started === 'run', `START に輪っかをのせると始まる (${started})`);
+    ok(started === 'run', `START 端子にリングをのせると始まる (${started})`);
     await phone.mouse.move(wallPts.mid.x, wallPts.mid.y);
     await phone.mouse.move(wallPts.out.x, wallPts.out.y);
     await phone.waitForTimeout(60);
     const hitWall = await phone.evaluate(() => ({ mode: window.__app.mode(), kind: window.__app.state().result.kind }));
     await phone.mouse.up();
-    ok(hitWall.mode === 'fail' && hitWall.kind === 'wall', `カベにさわるとしっぱい (${hitWall.kind})`);
+    ok(hitWall.mode === 'fail' && hitWall.kind === 'wall', `外わくにさわるとショート (${hitWall.kind})`);
 
     // 1 秒たつと、すぐやり直せる状態にもどる
     await phone.waitForTimeout(1200);
@@ -231,7 +231,7 @@ async function run() {
       `とちゅうで指をはなすとしっぱい (${released.kind})`);
 
     // ------------------------------------------------ 邪魔もの
-    section('じゃまもの');
+    section('可動部');
     await phone.waitForTimeout(1100);
     await phone.evaluate(() => window.__app.selectStage(3));
     await phone.waitForTimeout(200);
@@ -247,8 +247,8 @@ async function run() {
         });
       }, 500);
     }));
-    ok(haz.count === haz.want, `じゃまものがステージのぶんだけ出ている (${haz.count}/${haz.want})`);
-    ok(haz.moved > 3, `じゃまものが動いている (0.5 秒で ${haz.moved}px)`);
+    ok(haz.count === haz.want, `可動部が品番のぶんだけ出ている (${haz.count}/${haz.want})`);
+    ok(haz.moved > 3, `可動部が動いている (0.5 秒で ${haz.moved}px)`);
 
     // 邪魔ものの所まで行って、そこで止まっていればいつか必ずやられる
     const into = await phone.evaluate(() => {
@@ -274,10 +274,10 @@ async function run() {
       hitHaz = await phone.evaluate(() => window.__app.state().result.kind);
     } catch (e) { hitHaz = 'やられなかった'; }
     await phone.mouse.up();
-    ok(hitHaz === 'hazard', `じゃまものの前で止まっているとやられる (${hitHaz})`);
+    ok(hitHaz === 'hazard', `可動部の前で止まっているとショート (${hitHaz})`);
 
     // ------------------------------------------------ ステージ一覧
-    section('ステージ一覧');
+    section('検査ライン');
     await phone.waitForTimeout(1100);
     await phone.locator('#btnStages').tap();
     await phone.waitForTimeout(200);
@@ -285,14 +285,14 @@ async function run() {
       open: !document.getElementById('sheetWrap').hidden,
       rows: document.querySelectorAll('#sheetBody .stage-row').length
     }));
-    ok(sheet.open && sheet.rows === 6, `ステージが 6 つならぶ (${sheet.rows})`);
+    ok(sheet.open && sheet.rows === 6, `品番が 6 つならぶ (${sheet.rows})`);
     await phone.locator('#sheetBody [data-stage="2"]').tap();
     await phone.waitForTimeout(200);
     const picked = await phone.evaluate(() => ({
       closed: document.getElementById('sheetWrap').hidden,
       name: document.getElementById('stageName').textContent
     }));
-    ok(picked.closed && picked.name.startsWith('3.'), `えらんだステージに切りかわる (${picked.name})`);
+    ok(picked.closed && picked.name.startsWith('IRB-03'), `えらんだ品番に切りかわる (${picked.name})`);
 
     // ------------------------------------------------ 続きから
     section('続きから');

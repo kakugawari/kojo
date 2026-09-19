@@ -219,6 +219,15 @@ test('すべてのステージは、必ずクリアできる', () => {
   }
 });
 
+test('どの品番にも番号がついている', () => {
+  const seen = {};
+  for (const st of C.STAGES) {
+    assert.ok(/^IRB-\d\d$/.test(st.model), `${st.id}: 品番がおかしい (${st.model})`);
+    assert.ok(!seen[st.model], `品番がかぶっている (${st.model})`);
+    seen[st.model] = 1;
+  }
+});
+
 test('ステージはだんだん細く、だんだん邪魔ものが増える', () => {
   for (let i = 1; i < C.STAGES.length; i++) {
     assert.ok(C.STAGES[i].corridor < C.STAGES[i - 1].corridor, `${C.STAGES[i].id} が細くなっていない`);

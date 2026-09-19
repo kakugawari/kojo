@@ -16,8 +16,9 @@
   const $ = (id) => document.getElementById(id);
   const els = {
     app: $('app'), board: $('board'), bg: $('bg'), gripZone: $('gripZone'),
-    course: $('course'), hazards: $('hazards'), player: $('player'),
-    stick: $('stick'), grip: $('grip'), ring: $('ring'), fx: $('fx'),
+    panel: $('panel'), course: $('course'), hazards: $('hazards'), player: $('player'),
+    rodBack: $('rodBack'), rod: $('rod'), handle: $('handle'),
+    grip: $('grip'), ring: $('ring'), fx: $('fx'),
     stageName: $('stageName'), time: $('time'), best: $('best'),
     progressBar: $('progressBar'), overlay: $('overlay'),
     btnStages: $('btnStages'), btnSound: $('btnSound'),
@@ -135,10 +136,11 @@
       layer('var(--wall)', 12) +
       layer('var(--paper)', 0) +
       '<path class="dash" d="' + d + '"/>' +
-      '<g><circle cx="' + sp.x + '" cy="' + sp.y + '" r="' + (pad - 10) + '" fill="none" stroke="var(--start)" stroke-width="5"/>' +
-      '<text x="' + sp.x + '" y="' + (sp.y + 6) + '" text-anchor="middle" font-size="19" fill="#1c7a44">START</text></g>' +
-      '<g><circle cx="' + gp.x + '" cy="' + gp.y + '" r="' + (pad - 10) + '" fill="none" stroke="#c98b00" stroke-width="5"/>' +
-      '<text x="' + gp.x + '" y="' + (gp.y + 7) + '" text-anchor="middle" font-size="21" fill="#8a5c00">GOAL</text></g>';
+      // 端子。検査はここから入って、ここへ抜ける
+      '<g><circle cx="' + sp.x + '" cy="' + sp.y + '" r="' + (pad - 10) + '" fill="none" stroke="var(--start)" stroke-width="5" stroke-dasharray="14 9"/>' +
+      '<text x="' + sp.x + '" y="' + (sp.y + 6) + '" text-anchor="middle" font-size="18" fill="#177a41">START</text></g>' +
+      '<g><circle cx="' + gp.x + '" cy="' + gp.y + '" r="' + (pad - 10) + '" fill="none" stroke="#c98b00" stroke-width="5" stroke-dasharray="14 9"/>' +
+      '<text x="' + gp.x + '" y="' + (gp.y + 6) + '" text-anchor="middle" font-size="18" fill="#8a5c00">GOAL</text></g>';
   }
 
   // ------------------------------------------------------------ 邪魔ものを描く
@@ -161,6 +163,18 @@
           stroke: 'rgba(255,210,63,.24)', 'stroke-width': 3, 'stroke-dasharray': '10 10'
         }));
       } else {
+        // 玉が出てくる筒。どこから来るのかが分かるように、外がわへ伸ばす
+        const anchor = C.pointAt(game.stage.path, h.s);
+        const len = Math.hypot(h.x - anchor.x, h.y - anchor.y) || 1;
+        const ux = (h.x - anchor.x) / len, uy = (h.y - anchor.y) / len;
+        g.appendChild(svgEl('line', {
+          x1: h.x, y1: h.y, x2: h.x + ux * 46, y2: h.y + uy * 46,
+          stroke: '#1a1f2b', 'stroke-width': h.max * 1.5, 'stroke-linecap': 'round'
+        }));
+        g.appendChild(svgEl('line', {
+          x1: h.x, y1: h.y, x2: h.x + ux * 44, y2: h.y + uy * 44,
+          stroke: '#59647c', 'stroke-width': h.max * 1.5 - 8, 'stroke-linecap': 'round'
+        }));
         g.appendChild(svgEl('circle', {
           cx: h.x, cy: h.y, r: h.max, fill: 'none',
           stroke: 'rgba(255,210,63,.24)', 'stroke-width': 3, 'stroke-dasharray': '10 10'
@@ -191,54 +205,73 @@
     }
   }
 
-  // ------------------------------------------------------------ 輪っかのねこ
+  // ------------------------------------------------------------ テスト棒とリング
 
-  const MOOD_COLOR = { normal: '#fff6e8', near: '#ffa94d', fail: '#ff3d71', clear: '#7ee7a8' };
-
-  const MOOD_FACE = {
-    normal: '<circle cx="-5" cy="-1" r="2.3" fill="#3a2f52"/><circle cx="5" cy="-1" r="2.3" fill="#3a2f52"/>' +
-      '<path d="M0,3.4 q-2.4,2.4 -4.4,.2 M0,3.4 q2.4,2.4 4.4,.2" fill="none" stroke="#3a2f52" stroke-width="1.5" stroke-linecap="round"/>',
-    near: '<circle cx="-5.2" cy="-1" r="3.1" fill="#3a2f52"/><circle cx="5.2" cy="-1" r="3.1" fill="#3a2f52"/>' +
-      '<circle cx="-4.2" cy="-2" r="1" fill="#fff"/><circle cx="6.2" cy="-2" r="1" fill="#fff"/>' +
-      '<ellipse cx="0" cy="4.6" rx="3.2" ry="2.4" fill="#3a2f52"/>' +
-      '<path d="M10,-6 q2.6,3.4 0,5 q-2.6,-1.6 0,-5" fill="#7ec8ff"/>',
-    fail: '<path d="M-7.4,-3.4 l4.8,4.8 M-2.6,-3.4 l-4.8,4.8 M2.6,-3.4 l4.8,4.8 M7.4,-3.4 l-4.8,4.8" ' +
-      'fill="none" stroke="#3a2f52" stroke-width="1.9" stroke-linecap="round"/>' +
-      '<ellipse cx="0" cy="5" rx="3.6" ry="2.8" fill="#3a2f52"/>',
-    clear: '<path d="M-7.4,-1 q2.4,-3 4.8,0 M2.6,-1 q2.4,-3 4.8,0" fill="none" stroke="#3a2f52" stroke-width="1.9" stroke-linecap="round"/>' +
-      '<path d="M-3.4,3.6 q3.4,3.4 6.8,0" fill="none" stroke="#3a2f52" stroke-width="1.6" stroke-linecap="round"/>'
+  /*
+   * テスト棒の先のリング。当たり判定はこのリングの外がわちょうど。
+   * リングの見た目の外径も RING_R に合わせてあるので、
+   * 「見えている輪がカベに触れたら当たり」がそのまま成り立つ。
+   */
+  const RING_COLOR = {
+    normal: '#dfe6f0',   // みがいた金属
+    near: '#ffc53d',     // カベが近い
+    fail: '#ff3d5f',     // ショート
+    clear: '#5be59a'     // 合格
   };
 
   function setMood(mood) {
     if (game.mood === mood && els.ring.childNodes.length) return;
     game.mood = mood;
-    const col = MOOD_COLOR[mood];
+    const col = RING_COLOR[mood];
     const R = C.RING_R;
-    // コースの床がクリーム色なので、まわりを濃い色で縁取らないと輪っかが消える
     els.ring.innerHTML =
-      '<path d="M-12,-11 L-15.5,-19 L-6,-14.5 Z" fill="' + col + '" stroke="#231a35" stroke-width="3" stroke-linejoin="round"/>' +
-      '<path d="M12,-11 L15.5,-19 L6,-14.5 Z" fill="' + col + '" stroke="#231a35" stroke-width="3" stroke-linejoin="round"/>' +
-      '<circle r="' + (R - 1) + '" fill="#fffaf2" stroke="#231a35" stroke-width="7"/>' +
-      '<circle r="' + (R - 3.4) + '" fill="none" stroke="' + col + '" stroke-width="4.4"/>' +
-      '<ellipse cx="-9.4" cy="3.2" rx="3" ry="2" fill="#ff9dbb"/>' +
-      '<ellipse cx="9.4" cy="3.2" rx="3" ry="2" fill="#ff9dbb"/>' +
-      MOOD_FACE[mood];
+      // 外径がちょうど RING_R になるように、線の太さのぶんだけ内側に描く
+      '<circle r="' + (R - 4) + '" fill="none" stroke="#11141c" stroke-width="9"/>' +
+      '<circle r="' + (R - 4) + '" fill="none" stroke="' + col + '" stroke-width="5.4"/>' +
+      '<circle r="' + (R - 5.6) + '" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="1.2"/>' +
+      (mood === 'near' || mood === 'fail'
+        ? '<circle r="' + (R + 7) + '" fill="none" stroke="' + col + '" stroke-width="2.4" opacity=".55"/>'
+        : '');
   }
 
   function drawPlayer() {
     const r = game.ring, g = game.grip;
+    const line = (el, ax, ay, bx, by) => {
+      el.setAttribute('x1', ax.toFixed(1)); el.setAttribute('y1', ay.toFixed(1));
+      el.setAttribute('x2', bx.toFixed(1)); el.setAttribute('y2', by.toFixed(1));
+    };
+    line(els.rodBack, g.x, g.y, r.x, r.y);
+    line(els.rod, g.x, g.y, r.x, r.y);
+    // 手もと 1/3 はゴムのグリップ
+    line(els.handle, g.x, g.y, g.x + (r.x - g.x) * 0.34, g.y + (r.y - g.y) * 0.34);
     els.ring.setAttribute('transform', 'translate(' + r.x.toFixed(1) + ' ' + r.y.toFixed(1) + ')');
-    els.stick.setAttribute('x1', g.x.toFixed(1)); els.stick.setAttribute('y1', g.y.toFixed(1));
-    els.stick.setAttribute('x2', r.x.toFixed(1)); els.stick.setAttribute('y2', r.y.toFixed(1));
     els.grip.setAttribute('transform', 'translate(' + g.x.toFixed(1) + ' ' + g.y.toFixed(1) + ')');
   }
 
   function buildPlayerParts() {
     els.grip.innerHTML =
-      '<circle r="17" fill="rgba(0,0,0,.3)"/>' +
-      '<circle r="14" fill="#7a5230" stroke="#e0a869" stroke-width="3"/>' +
-      '<circle r="5" fill="rgba(255,255,255,.25)"/>';
+      '<circle r="17" fill="#11141c"/>' +
+      '<circle r="14" fill="#333b4d" stroke="#5c6880" stroke-width="2.5"/>' +
+      '<path d="M-8,-4 h16 M-8,0 h16 M-8,4 h16" stroke="#59657c" stroke-width="2" stroke-linecap="round"/>';
     setMood('normal');
+  }
+
+  /** 検査台のプレート。工場で作っている「ユニット」が乗っている板。 */
+  function buildPanel() {
+    const W = C.BOARD.w, H = C.BOARD.h;
+    const rivet = (x, y) =>
+      '<circle cx="' + x + '" cy="' + y + '" r="7" fill="#161a24"/>' +
+      '<circle cx="' + x + '" cy="' + (y - 1) + '" r="4.6" fill="#5e6a82"/>' +
+      '<circle cx="' + x + '" cy="' + (y - 2) + '" r="2" fill="#8d99b2"/>';
+    els.panel.innerHTML =
+      '<rect x="4" y="4" width="' + (W - 8) + '" height="' + (H - 8) + '" rx="26" fill="#2d364d" stroke="#5a6883" stroke-width="4"/>' +
+      '<rect x="4" y="4" width="' + (W - 8) + '" height="' + (H - 8) + '" rx="26" fill="url(#dots)"/>' +
+      '<rect x="14" y="14" width="' + (W - 28) + '" height="' + (H - 28) + '" rx="18" fill="none" stroke="rgba(255,255,255,.07)" stroke-width="3"/>' +
+      // 左右のふちに注意帯 (上ぶちは上のバーにかくれるので、横に入れる)
+      '<rect x="10" y="46" width="11" height="' + (H - 92) + '" rx="5.5" fill="url(#stripes)" opacity=".8"/>' +
+      '<rect x="' + (W - 21) + '" y="46" width="11" height="' + (H - 92) + '" rx="5.5" fill="url(#stripes)" opacity=".8"/>' +
+      rivet(32, 34) + rivet(W - 32, 34) + rivet(32, H / 2) + rivet(W - 32, H / 2) +
+      rivet(32, H - 26) + rivet(W - 32, H - 26);
   }
 
   // ------------------------------------------------------------ 進行
@@ -420,30 +453,30 @@
     const bt = b === undefined ? '--.--' : C.formatTime(b);
     if (force || bt !== game.lastBest) { game.lastBest = bt; els.best.textContent = bt; }
     if (force) {
-      els.stageName.textContent = (game.index + 1) + '. ' + game.stage.name;
+      els.stageName.textContent = game.stage.model + ' ' + game.stage.name;
       els.btnSound.textContent = save.muted ? '🔇' : '🔊';
       els.btnSound.setAttribute('aria-pressed', String(!!save.muted));
     }
   }
 
   const FAIL_TEXT = {
-    wall: 'カベにあたった！',
-    hazard: 'じゃまものにあたった！',
-    release: '指をはなした！'
+    wall: '外わくに接触',
+    hazard: '可動部に接触',
+    release: '手をはなした'
   };
 
   function renderOverlay() {
     els.overlay.classList.toggle('bottom', game.mode === 'ready');
     if (game.mode === 'ready') {
       els.overlay.innerHTML = '<div class="hint">' +
-        (game.holding ? '🟢 START の輪に入れるとスタート' : '指で棒を持って、START に輪っかをのせよう') +
+        (game.holding ? '端子に入れたら検査スタート' : 'テスト棒で START 端子にリングをのせる') +
         '</div>';
       return;
     }
     if (game.mode === 'run') { els.overlay.innerHTML = ''; return; }
     if (game.mode === 'fail') {
-      els.overlay.innerHTML = '<div class="panel"><div class="emoji">⚡🐱</div>' +
-        '<h2>ビリビリ！</h2><p>' + esc(FAIL_TEXT[game.result.kind] || 'しっぱい') + '</p></div>';
+      els.overlay.innerHTML = '<div class="panel ng"><div class="emoji">⚡</div>' +
+        '<h2>ショート！</h2><p>' + esc(FAIL_TEXT[game.result.kind] || 'しっぱい') + ' — 再検査</p></div>';
       return;
     }
     // clear
@@ -451,15 +484,17 @@
     const next = game.index + 1;
     const hasNext = next < C.STAGES.length;
     els.overlay.innerHTML = '<div class="panel">' +
-      '<div class="emoji">🎉🐱</div><h2>ゴール！</h2>' +
+      '<div class="stamp">合格</div>' +
+      '<h2>' + esc(game.stage.model) + ' 出荷</h2>' +
       '<div class="big">' + C.formatTime(r.ms) + '</div>' +
-      '<p>' + (r.best ? (r.prev === undefined ? 'はじめてのクリア！' : '自己ベスト更新！ まえは ' + C.formatTime(r.prev))
-        : 'ベストは ' + C.formatTime(save.best[game.stage.id])) + '</p>' +
+      '<p>' + (r.best ? (r.prev === undefined ? '初回の検査記録' : '記録更新！ まえは ' + C.formatTime(r.prev))
+        : '最速は ' + C.formatTime(save.best[game.stage.id])) + '<br>' +
+      'きょうまでの出荷 <b>' + save.clears + '</b> 台</p>' +
       '<div class="btn-row">' +
-      (hasNext ? '<button type="button" class="btn" data-next="1">つぎへ ▶</button>' : '') +
-      '<button type="button" class="btn alt" data-again="1">もういちど</button>' +
+      (hasNext ? '<button type="button" class="btn" data-next="1">つぎの品番 ▶</button>' : '') +
+      '<button type="button" class="btn alt" data-again="1">もう 1 台</button>' +
       '</div>' +
-      (hasNext ? '' : '<p>ぜんぶクリア！ おつかれさま 🏆</p>') +
+      (hasNext ? '' : '<p>全品番クリア。ライン長おつかれさま 🏭</p>') +
       '</div>';
   }
 
@@ -480,12 +515,13 @@
       return '<button type="button" class="stage-row" data-stage="' + i + '"' +
         (open ? '' : ' disabled') + ' aria-current="' + (i === game.index) + '">' +
         '<span class="no">' + (open ? (i + 1) : '🔒') + '</span>' +
-        '<span class="nm">' + esc(st.name) +
-        '<span class="sub">' + (open ? 'コースのはば ' + (st.corridor * 2) + ' ・ じゃまもの ' + st.hazards.length : 'まえのステージをクリアすると出る') + '</span></span>' +
+        '<span class="nm">' + esc(st.model) + ' <span class="dim">' + esc(st.name) + '</span>' +
+        '<span class="sub">' + (open ? 'みぞ幅 ' + (st.corridor * 2) + ' ・ 可動部 ' + st.hazards.length + ' か所'
+          : 'まえの品番に合格すると流れてくる') + '</span></span>' +
         '<span class="rec">' + (b === undefined ? '' : '★ ' + C.formatTime(b)) + '</span>' +
         '</button>';
     }).join('') +
-      '<p class="note">クリアすると次のステージがひらく。じゃまものの動きは毎回おなじなので、覚えれば必ず通れる。</p>';
+      '<p class="note">合格すると次の品番がラインに流れてくる。可動部の動きは毎回まったくおなじ（検査開始から数えている）ので、覚えれば必ず通せる。<br>出荷ずみ <b>' + save.clears + '</b> 台 ・ 検査 <b>' + save.tries + '</b> 回</p>';
   }
   function closeSheet() { els.sheetWrap.hidden = true; }
 
@@ -577,8 +613,9 @@
       '<line x1="24" y1="' + C.BOARD.h + '" x2="' + (VIEW.w - 24) + '" y2="' + C.BOARD.h +
       '" stroke="rgba(255,255,255,.1)" stroke-width="3" stroke-dasharray="12 12"/>' +
       '<text x="' + (VIEW.w / 2) + '" y="' + (C.BOARD.h + 58) + '" text-anchor="middle" font-size="22" ' +
-      'fill="rgba(255,255,255,.22)">ここは指を置くところ</text>';
+      'fill="rgba(255,255,255,.2)">— 作業台（ここをにぎる）—</text>';
 
+    buildPanel();
     buildPlayerParts();
     // 記録がいちばん進んでいる所から始める
     selectStage(Math.min(save.unlocked - 1, C.STAGES.length - 1));
