@@ -1,7 +1,7 @@
 {
-  "name": "nekokojo",
+  "name": "neko-irairabou",
   "version": "1.0.0",
-  "description": "ねこ工場 — かわいいねこたちが働く工場を大きくしていくゲーム",
+  "description": "ねこイライラ棒 — 輪っかをカベに当てずにゴールまで運ぶゲーム",
   "private": true,
   "scripts": {
     "start": "node serve.js",

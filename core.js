@@ -1,8 +1,11 @@
 /*!
- * core.js — ねこ工場のロジック。DOM を一切触らないので node でテストできる。
+ * core.js — イライラ棒のロジック。DOM を一切触らないので node でテストできる。
  *
- * ここにある値はすべて state から計算し直せる (derived)。
- * 「収入」も「工場レベル」も保存しない。保存すると必ずどこかでズレるため。
+ * ★ この game のいちばん大事な決めごと
+ *   コースは「1 本の折れ線 (path) を太らせたもの」として定義する。
+ *   - 壁の判定 = 折れ線までの距離がコース半径をこえたか、それだけ
+ *   - 中心線をたどれば必ずゴールに着く (行き止まりを作れない)
+ *   絵と判定が同じ 1 本の折れ線から出るので、見た目と当たりがズレようがない。
  */
 (function (root, factory) {
   'use strict';
@@ -16,669 +19,644 @@
 
   // ------------------------------------------------------------ 決めごと
 
-  const SAVE_KEY = 'nekokojo.save.v1';
+  const SAVE_KEY = 'irairabou.save.v1';
   const SAVE_VERSION = 1;
 
-  /** アイソメトリックの升目。1 マス = w x h ピクセル、壁の高さ = wall。 */
-  const TILE = { w: 72, h: 36, wall: 54 };
+  /** 盤面の広さ。画面の大きさが変わっても、ここは変わらない。
+   *  遊びやすさ (コースの細さ・棒の長さ) が端末でブレないようにするため。 */
+  const BOARD = { w: 640, h: 960 };
 
-  /** 1 回の tick で進める上限。タブを戻した瞬間に巨大な dt が来ても壊れない。 */
-  const TICK_CAP_MS = 4000;
+  /** 輪っかの半径。当たり判定はこの円ちょうど。絵もこの円で描く。 */
+  const RING_R = 22;
 
-  /** 留守中のもうけ: 何時間ぶんまで / 何割か。 */
-  const OFFLINE_CAP_MS = 8 * 60 * 60 * 1000;
-  const OFFLINE_RATE = 0.4;
+  /** 指から輪っかまでの棒の長さ。指で輪っかが隠れないように持ち上げる。 */
+  const STICK = 96;
 
-  /** ゲーム内の時間の進み方。実時間 1 秒 = ゲーム内 1 分 (1 日 = 24 分)。 */
-  const GAME_MIN_PER_SEC = 1;
-  const START_GAME_MIN = 9 * 60;
+  /** 「もう少しで壁」の合図を出す余裕。 */
+  const NEAR = 13;
 
-  /**
-   * 部署。x,y,w,h は升目の座標。ここを直せば間取りが変わる。
-   * machine = 部屋のはしに置く機械、product = ベルトを流れてくるもの。
+  /** 1 つの邪魔ものがふさいでよい長さの上限。
+   *  これをこえるものは、コースの別の場所まで巻きこんでいるので置かない。 */
+  const MAX_ZONE = 340;
+
+  const TAU = Math.PI * 2;
+
+  // ------------------------------------------------------------ コース
+
+  /*
+   * path    : 中心線。ここを太らせたものがコース
+   * corridor: コースの半径 (太さの半分)。小さいほど細い
+   * hazards : 動く邪魔もの。型と「どちら側か (side)」「周期」だけを書く。
+   *           置き場所と大きさは、コースの形から自動で決まる
+   *           (buildStages が、置ける場所をならべて均等に配る)。
+   *           そうすると「必ずコースに絡む」「必ず通れる瞬間がある」が
+   *           作りの側で保証される (手で座標を置くと、どちらも簡単に壊れる)。
+   *   slide … コースを横切って往復する棒。外に出ているあいだが通しどころ
+   *   rotor … 支点をコースの外に置いて回る腕。腕が向こうを向くまで待つ
+   *   pulse … 壁からふくらんでくる玉。縮んだときに通る
    */
-  const ROOMS = [
+  const STAGES = [
     {
-      id: 'gohan', short: 'ごはん', name: 'ごはん工房', icon: '🍙', kind: 'produce',
-      x: 0, y: 0, w: 4, h: 3, slots: 3, unlock: 1,
-      baseRate: 2, baseCost: 30, growth: 1.13,
-      floor: '#ffe0b8', wall: '#fff6ea', accent: '#ff9c5b',
-      machine: 'kama', product: 'onigiri',
-      about: 'おおきな釜でにぼしごはんをたいて、ベルトの上でおにぎりにする。'
+      id: 's1', name: 'ならし運転', corridor: 58,
+      path: [[110, 130], [110, 330], [325, 330], [325, 545], [530, 545], [530, 790], [300, 790], [300, 880]],
+      hazards: []
     },
     {
-      id: 'kumitate', short: 'くみたて', name: 'くみたてライン', icon: '🔧', kind: 'produce',
-      x: 5, y: 0, w: 4, h: 3, slots: 4, unlock: 4,
-      baseRate: 18, baseCost: 420, growth: 1.135,
-      floor: '#cde5ff', wall: '#f0f8ff', accent: '#4aa8ff',
-      machine: 'press', product: 'gear',
-      about: 'プレス機が打ち出した部品を、流れてくるそばから組み立てる。'
+      id: 's2', name: 'はじめのカベ', corridor: 50,
+      path: [[105, 120], [105, 340], [300, 420], [300, 620], [520, 620], [520, 280], [430, 200], [430, 110]],
+      hazards: [
+        { type: 'slide', side: 1, period: 2000, phase: 0 }
+      ]
     },
     {
-      id: 'kenpin', short: 'けんぴん', name: 'けんぴんライン', icon: '🔍', kind: 'produce',
-      x: 0, y: 4, w: 4, h: 3, slots: 4, unlock: 12,
-      baseRate: 160, baseCost: 7800, growth: 1.14,
-      floor: '#d4f0dc', wall: '#f0fbf3', accent: '#48c184',
-      machine: 'scanner', product: 'box',
-      about: 'ゲートをくぐった品を、ひとつずつ肉球でさわって確かめる。'
+      id: 's3', name: 'くるくる', corridor: 46,
+      path: [[100, 120], [100, 360], [280, 360], [280, 140], [455, 140], [455, 420], [300, 560], [300, 800], [545, 800], [545, 620]],
+      hazards: [
+        { type: 'rotor', side: 1, period: 2600, phase: 0 },
+        { type: 'pulse', side: -1, period: 1900, phase: .3 }
+      ]
     },
     {
-      id: 'keito', short: 'けいと', name: 'けいと工房', icon: '🧶', kind: 'produce',
-      x: 5, y: 4, w: 4, h: 3, slots: 5, unlock: 26,
-      baseRate: 1400, baseCost: 145000, growth: 1.145,
-      floor: '#e0dbff', wall: '#f4f2ff', accent: '#8a7dff',
-      machine: 'spinner', product: 'yarn',
-      about: '糸車をぐるぐるまわして毛糸玉を巻く。だいたい糸まみれになる。'
+      id: 's4', name: 'ジグザグ', corridor: 42,
+      path: [[95, 110], [95, 300], [235, 400], [95, 500], [95, 700], [300, 780], [500, 700], [500, 420], [560, 330], [560, 120]],
+      hazards: [
+        { type: 'slide', side: 1, period: 1700, phase: 0 },
+        { type: 'rotor', side: -1, period: 2300, phase: .5 },
+        { type: 'pulse', side: 1, period: 1600, phase: .15 }
+      ]
     },
     {
-      id: 'shukka', short: 'しゅっか', name: 'しゅっか場', icon: '📦', kind: 'produce',
-      x: 0, y: 8, w: 4, h: 3, slots: 5, unlock: 46,
-      baseRate: 13000, baseCost: 2600000, growth: 1.15,
-      floor: '#ffd7e5', wall: '#fff0f5', accent: '#ff6f9c',
-      machine: 'crane', product: 'crate',
-      about: 'クレーンで箱をつり上げて、トラックへ積む。ねこは箱に入りたがる。'
+      id: 's5', name: 'ながい道', corridor: 40,
+      path: [[90, 110], [90, 340], [255, 340], [255, 130], [420, 130], [420, 360], [255, 480], [255, 700], [90, 700], [90, 870], [400, 870], [555, 760], [555, 230]],
+      hazards: [
+        { type: 'rotor', side: 1, period: 2100, phase: 0 },
+        { type: 'slide', side: 1, period: 1500, phase: .25 },
+        { type: 'pulse', side: -1, period: 1500, phase: .5 },
+        { type: 'slide', side: -1, period: 1800, phase: .6 }
+      ]
     },
     {
-      id: 'kyukei', short: 'きゅうけい', name: 'きゅうけい室', icon: '🛋️', kind: 'boost',
-      x: 5, y: 8, w: 4, h: 3, slots: 6, unlock: 72,
-      baseRate: 0, baseCost: 40000000, growth: 1.16,
-      boostPerLevel: 0.03,
-      floor: '#ffefc2', wall: '#fffaea', accent: '#ffc53d',
-      machine: 'sofa', product: null,
-      about: 'ここで昼寝したねこは、工場ぜんたいのもうけを上げる。'
+      id: 's6', name: 'イライラ棒', corridor: 36,
+      path: [[85, 110], [85, 290], [215, 380], [85, 470], [85, 660], [230, 745], [230, 880], [430, 880], [430, 650], [300, 560], [430, 470], [430, 250], [560, 170], [560, 100]],
+      hazards: [
+        { type: 'slide', side: 1, period: 1400, phase: 0 },
+        { type: 'pulse', side: -1, period: 1300, phase: .35 },
+        { type: 'rotor', side: 1, period: 1900, phase: .5 },
+        { type: 'slide', side: -1, period: 1600, phase: .15 }
+      ]
     }
   ];
 
-  /** 前の版のセーブを、今の部署の名前に読みかえる。 */
-  const OLD_ROOM_IDS = {
-    kitchen: 'gohan', line: 'kumitate', qa: 'kenpin',
-    dev: 'keito', ship: 'shukka', lounge: 'kyukei'
-  };
+  // ------------------------------------------------------------ 幾何
 
-  /** 部署のない廊下も含めた升目の広さ。 */
-  const GRID = { w: 9, h: 11 };
+  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
-  const RARITIES = [
-    { id: 'N', name: 'ふつう', power: 0.10, color: '#a9bacd', weight: 60 },
-    { id: 'R', name: 'レア', power: 0.30, color: '#4db6ff', weight: 27 },
-    { id: 'SR', name: 'スーパーレア', power: 0.85, color: '#b57bff', weight: 10 },
-    { id: 'UR', name: 'ウルトラレア', power: 2.40, color: '#ffb02e', weight: 3 }
-  ];
-
-  /** 見た目の種類。色は SVG からそのまま使う。 */
-  const KINDS = [
-    { id: 'kiji', name: 'きじとら', fur: '#d9a86c', dark: '#b17f42', belly: '#f7e6cb', stripes: true },
-    { id: 'cha', name: 'ちゃとら', fur: '#f0a860', dark: '#c87a33', belly: '#ffeed6', stripes: true },
-    { id: 'shiro', name: 'しろ', fur: '#fdfaf5', dark: '#e2d7c8', belly: '#ffffff', stripes: false },
-    { id: 'kuro', name: 'くろ', fur: '#615c70', dark: '#464253', belly: '#837d92', stripes: false },
-    { id: 'hachi', name: 'ハチワレ', fur: '#8f8b9b', dark: '#6c6878', belly: '#ffffff', stripes: false, tuxedo: true },
-    { id: 'mike', name: 'みけ', fur: '#fdfaf5', dark: '#ded3c4', belly: '#ffffff', stripes: false, calico: true },
-    { id: 'sabi', name: 'さび', fur: '#8d6d58', dark: '#69503e', belly: '#d9b89b', stripes: false, calico: true },
-    { id: 'gray', name: 'グレー', fur: '#bcc5d1', dark: '#96a2b3', belly: '#eaeff5', stripes: true },
-    { id: 'siam', name: 'シャム', fur: '#ecdfca', dark: '#9a7a60', belly: '#f8f0e3', stripes: false, points: true }
-  ];
-
-  const NAMES = [
-    'みかん', 'こむぎ', 'もち', 'あずき', 'きなこ', 'だいふく', 'とら', 'ふく',
-    'ちゃちゃ', 'くるみ', 'ぷりん', 'おはぎ', 'しお', 'こはく', 'まろん', 'ゆず',
-    'あんこ', 'そら', 'なな', 'ここあ', 'むぎ', 'ごま', 'てん', 'はな',
-    'りん', 'たま', 'くろまめ', 'しろたん', 'ぽん', 'うに', 'すず', 'のり'
-  ];
-
-  /** ガチャ 1 回の値段 (にくきゅう)。10 連は 1 回ぶんおまけ + レア以上が確定。 */
-  const GACHA_COST = 12;
-  const GACHA_COST_10 = GACHA_COST * 9;
-
-  const ACHIEVEMENTS = [
-    { id: 'start', name: 'はじめの一歩', desc: 'はじめてもうける', paw: 3, test: (s) => s.totalEarned > 0 },
-    { id: 'cat3', name: 'にゃんこ 3 びき', desc: 'ねこを 3 びきあつめる', paw: 5, test: (s) => s.cats.length >= 3 },
-    { id: 'cat10', name: 'にゃんこ 10 ぴき', desc: 'ねこを 10 ぴきあつめる', paw: 15, test: (s) => s.cats.length >= 10 },
-    { id: 'cat25', name: 'ねこだらけ', desc: 'ねこを 25 ひきあつめる', paw: 40, test: (s) => s.cats.length >= 25 },
-    { id: 'rare', name: 'はじめてのレア', desc: 'レア以上のねこをむかえる', paw: 8, test: (s) => s.cats.some((c) => c.rarity !== 'N') },
-    { id: 'ur', name: 'でんせつのねこ', desc: 'ウルトラレアをむかえる', paw: 60, test: (s) => s.cats.some((c) => c.rarity === 'UR') },
-    { id: 'room2', name: 'ふたつめの部署', desc: '部署を 2 つひらく', paw: 6, test: (s) => builtRooms(s).length >= 2 },
-    { id: 'room4', name: 'そこそこの工場', desc: '部署を 4 つひらく', paw: 20, test: (s) => builtRooms(s).length >= 4 },
-    { id: 'roomAll', name: 'フル操業', desc: 'すべての部署をひらく', paw: 100, test: (s) => builtRooms(s).length >= ROOMS.length },
-    { id: 'lv20', name: '工場レベル 20', desc: '工場レベルを 20 にする', paw: 10, test: (s) => factoryLevel(s) >= 20 },
-    { id: 'lv50', name: '工場レベル 50', desc: '工場レベルを 50 にする', paw: 30, test: (s) => factoryLevel(s) >= 50 },
-    { id: 'lv100', name: '工場レベル 100', desc: '工場レベルを 100 にする', paw: 80, test: (s) => factoryLevel(s) >= 100 },
-    { id: 'earn1m', name: '100 万円', desc: 'あわせて 100 万円かせぐ', paw: 12, test: (s) => s.totalEarned >= 1e6 },
-    { id: 'earn1b', name: '10 億円', desc: 'あわせて 10 億円かせぐ', paw: 50, test: (s) => s.totalEarned >= 1e9 },
-    { id: 'tap100', name: 'なでなで 100 回', desc: '工場を 100 回さわる', paw: 10, test: (s) => s.taps >= 100 }
-  ];
-
-  // ------------------------------------------------------------ 乱数
-
-  /** 決まった順番で数を出す乱数 (mulberry32)。同じ seed からは同じ並び。 */
-  function mulberry32(seed) {
-    let a = seed >>> 0;
-    return function () {
-      a = (a + 0x6d2b79f5) >>> 0;
-      let t = a;
-      t = Math.imul(t ^ (t >>> 15), t | 1);
-      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
+  /** 点と線分の距離。t は線分上のどこがいちばん近いか (0〜1)。 */
+  function segDist(px, py, ax, ay, bx, by) {
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    let t = len2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0;
+    t = clamp(t, 0, 1);
+    const cx = ax + dx * t, cy = ay + dy * t;
+    return { d: Math.hypot(px - cx, py - cy), t: t, x: cx, y: cy };
   }
 
-  function pick(rng, list) {
-    return list[Math.floor(rng() * list.length) % list.length];
+  /** 2 つの線分が交わっているか。 */
+  function segCross(a, b, c, d) {
+    const cr = (ox, oy, px, py, qx, qy) => (px - ox) * (qy - oy) - (py - oy) * (qx - ox);
+    const d1 = cr(c[0], c[1], d[0], d[1], a[0], a[1]);
+    const d2 = cr(c[0], c[1], d[0], d[1], b[0], b[1]);
+    const d3 = cr(a[0], a[1], b[0], b[1], c[0], c[1]);
+    const d4 = cr(a[0], a[1], b[0], b[1], d[0], d[1]);
+    return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
   }
 
-  /** weight つきの抽選。合計に依存しないので、重みを足しても直さなくていい。 */
-  function weighted(rng, list, minIndex) {
-    const pool = minIndex ? list.slice(minIndex) : list;
-    let total = 0;
-    for (const item of pool) total += item.weight;
-    let r = rng() * total;
-    for (const item of pool) {
-      r -= item.weight;
-      if (r < 0) return item;
-    }
-    return pool[pool.length - 1];
+  /** 線分どうしの最短距離。コースが自分自身とくっついていないか調べるのに使う。 */
+  function segSegDist(a, b, c, d) {
+    if (segCross(a, b, c, d)) return 0;
+    let best = Math.min(
+      segDist(a[0], a[1], c[0], c[1], d[0], d[1]).d,
+      segDist(b[0], b[1], c[0], c[1], d[0], d[1]).d,
+      segDist(c[0], c[1], a[0], a[1], b[0], b[1]).d,
+      segDist(d[0], d[1], a[0], a[1], b[0], b[1]).d
+    );
+    return best;
   }
 
-  // ------------------------------------------------------------ 参照
-
-  function roomDef(id) {
-    for (const def of ROOMS) if (def.id === id) return def;
-    return null;
+  function pathSegments(path) {
+    const out = [];
+    for (let i = 0; i + 1 < path.length; i++) out.push([path[i], path[i + 1]]);
+    return out;
   }
 
-  function rarityDef(id) {
-    for (const r of RARITIES) if (r.id === id) return r;
-    return RARITIES[0];
-  }
-
-  function kindDef(id) {
-    for (const k of KINDS) if (k.id === id) return k;
-    return KINDS[0];
-  }
-
-  /** その部署のレベル (0 = まだ建てていない)。 */
-  function roomLevel(state, id) {
-    return state.rooms[id] || 0;
-  }
-
-  function builtRooms(state) {
-    return ROOMS.filter((def) => roomLevel(state, def.id) > 0);
-  }
-
-  function catsIn(state, roomId) {
-    return state.cats.filter((c) => c.room === roomId);
-  }
-
-  // ------------------------------------------------------------ 数のしくみ
-
-  /**
-   * 工場レベル。「建てた部署のレベルの合計 + ねこの数 + 1」で決める。
-   * どこにも保存しないので、セーブが壊れてもズレようがない。
-   */
-  function factoryLevel(state) {
-    let sum = 1;
-    for (const def of ROOMS) sum += roomLevel(state, def.id);
-    return sum + state.cats.length;
-  }
-
-  /** ねこ 1 ぴきの力。レア度 × レベル。 */
-  function catPower(cat) {
-    return rarityDef(cat.rarity).power * (1 + 0.25 * (cat.level - 1));
-  }
-
-  /** その部署にいるねこの合計倍率 (ねこ 0 ひきなら 1 倍)。 */
-  function roomCatBonus(state, roomId) {
-    let bonus = 1;
-    for (const cat of state.cats) if (cat.room === roomId) bonus += catPower(cat);
-    return bonus;
-  }
-
-  /** きゅうけい室の効果。工場ぜんたいのもうけにかかる倍率。 */
-  function boostMultiplier(state) {
-    let mult = 1;
-    for (const def of ROOMS) {
-      if (def.kind !== 'boost') continue;
-      const level = roomLevel(state, def.id);
-      if (level <= 0) continue;
-      mult += level * def.boostPerLevel * roomCatBonus(state, def.id);
-    }
-    return mult;
-  }
-
-  /** 部署 1 つのもうけ (円/秒)。きゅうけい室は 0 (かわりに倍率を出す)。 */
-  function roomRate(state, roomId) {
-    const def = roomDef(roomId);
-    const level = roomLevel(state, roomId);
-    if (!def || level <= 0 || def.kind !== 'produce') return 0;
-    return def.baseRate * level * roomCatBonus(state, roomId);
-  }
-
-  /** 工場ぜんたいのもうけ (円/秒)。 */
-  function totalRate(state) {
+  function pathLength(path) {
     let sum = 0;
-    for (const def of ROOMS) sum += roomRate(state, def.id);
-    return sum * boostMultiplier(state);
-  }
-
-  /** 次にそのレベルへ上げる値段。level 0 のときは「建てる値段」。 */
-  function upgradeCost(state, roomId) {
-    const def = roomDef(roomId);
-    if (!def) return Infinity;
-    return Math.ceil(def.baseCost * Math.pow(def.growth, roomLevel(state, roomId)));
-  }
-
-  function isUnlocked(state, roomId) {
-    const def = roomDef(roomId);
-    return !!def && factoryLevel(state) >= def.unlock;
-  }
-
-  /** 買えるだけ買ったら何レベル上がるか。まとめ買いの表示に使う。 */
-  function affordableLevels(state, roomId, budget) {
-    const def = roomDef(roomId);
-    if (!def) return { levels: 0, cost: 0 };
-    let level = roomLevel(state, roomId);
-    let cost = 0;
-    let levels = 0;
-    for (let i = 0; i < 500; i++) {
-      const next = Math.ceil(def.baseCost * Math.pow(def.growth, level));
-      if (cost + next > budget) break;
-      cost += next;
-      level++;
-      levels++;
+    for (let i = 0; i + 1 < path.length; i++) {
+      sum += Math.hypot(path[i + 1][0] - path[i][0], path[i + 1][1] - path[i][1]);
     }
-    return { levels: levels, cost: cost };
+    return sum;
   }
 
-  function catLevelCost(cat) {
-    const idx = RARITIES.findIndex((r) => r.id === cat.rarity);
-    return Math.ceil((4 + 4 * idx) * Math.pow(1.55, cat.level - 1));
-  }
-
-  // ------------------------------------------------------------ 動かす
-
-  function newCat(rng, opts) {
-    const options = opts || {};
-    const minIndex = options.minRarity ? RARITIES.findIndex((r) => r.id === options.minRarity) : 0;
-    const rarity = weighted(rng, RARITIES, minIndex > 0 ? minIndex : 0);
-    return {
-      id: 'c' + Math.floor(rng() * 0xffffffff).toString(36) + Date.now().toString(36).slice(-4),
-      name: pick(rng, NAMES),
-      kind: pick(rng, KINDS).id,
-      rarity: rarity.id,
-      level: 1,
-      room: null,
-      face: Math.floor(rng() * 4)
-    };
-  }
-
-  /** あいている席をさがす。作った部署のうち、ねこの少ないところから。 */
-  function findOpenRoom(state) {
-    let best = null;
-    let bestCount = Infinity;
-    for (const def of ROOMS) {
-      if (roomLevel(state, def.id) <= 0) continue;
-      const count = catsIn(state, def.id).length;
-      if (count < def.slots && count < bestCount) {
-        best = def.id;
-        bestCount = count;
-      }
+  /** 中心線までの距離と、そこまで進んだ長さ。 */
+  function nearestOnPath(path, x, y) {
+    let best = { d: Infinity, s: 0, x: path[0][0], y: path[0][1] };
+    let acc = 0;
+    for (let i = 0; i + 1 < path.length; i++) {
+      const a = path[i], b = path[i + 1];
+      const seg = segDist(x, y, a[0], a[1], b[0], b[1]);
+      const segLen = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (seg.d < best.d) best = { d: seg.d, s: acc + segLen * seg.t, x: seg.x, y: seg.y };
+      acc += segLen;
     }
     return best;
   }
 
-  function addCat(state, cat) {
-    state.cats.push(cat);
-    const room = findOpenRoom(state);
-    if (room) cat.room = room;
-    return cat;
+  /** 中心線を s だけ進んだ所。 */
+  function pointAt(path, s) {
+    let acc = 0;
+    for (let i = 0; i + 1 < path.length; i++) {
+      const a = path[i], b = path[i + 1];
+      const segLen = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (acc + segLen >= s || i === path.length - 2) {
+        const t = segLen > 0 ? clamp((s - acc) / segLen, 0, 1) : 0;
+        return { x: a[0] + (b[0] - a[0]) * t, y: a[1] + (b[1] - a[1]) * t };
+      }
+      acc += segLen;
+    }
+    return { x: path[0][0], y: path[0][1] };
   }
 
-  /** 席の数を超えないように配属する。超えるなら false を返して何もしない。 */
-  function assignCat(state, catId, roomId) {
-    const cat = state.cats.find((c) => c.id === catId);
-    if (!cat) return false;
-    if (roomId === null) { cat.room = null; return true; }
-    const def = roomDef(roomId);
-    if (!def || roomLevel(state, roomId) <= 0) return false;
-    if (cat.room === roomId) return true;
-    if (catsIn(state, roomId).length >= def.slots) return false;
-    cat.room = roomId;
-    return true;
+  /** 中心線を s 進んだ所の進行方向 (長さ 1)。 */
+  function tangentAt(path, s) {
+    let acc = 0;
+    for (let i = 0; i + 1 < path.length; i++) {
+      const a = path[i], b = path[i + 1];
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      if (acc + len >= s || i === path.length - 2) return { x: (b[0] - a[0]) / len, y: (b[1] - a[1]) / len };
+      acc += len;
+    }
+    return { x: 1, y: 0 };
   }
 
-  function buyUpgrade(state, roomId) {
-    if (!isUnlocked(state, roomId)) return false;
-    const cost = upgradeCost(state, roomId);
-    if (state.money < cost) return false;
-    state.money -= cost;
-    state.rooms[roomId] = roomLevel(state, roomId) + 1;
-    // 建てたばかりの部署には、あぶれているねこを入れてあげる
-    if (state.rooms[roomId] === 1) {
-      for (const cat of state.cats) {
-        if (cat.room === null && catsIn(state, roomId).length < roomDef(roomId).slots) cat.room = roomId;
+  // ------------------------------------------------------------ 邪魔もの
+
+  /**
+   * 「コースのどこに置くか」から、邪魔ものの実際の形を作る。
+   *
+   * どの型も、中心線に立っている輪っかとの余裕がプラスになる瞬間を必ず持つ。
+   * だから「待てば通れる」ことが、数字を手で置かなくても保証される。
+   */
+  /**
+   * ある時刻の邪魔ものの形。ぜんぶ「線分 + 太さ」(カプセル) で表す。
+   * 形が 1 種類なので、当たり判定も描画も 1 つで足りる。
+   */
+  function hazardShape(h, ms) {
+    const u = ((ms / h.period) + (h.phase || 0)) % 1;
+    if (h.type === 'rotor') {
+      const a = TAU * u * (h.dir || 1);
+      return { x1: h.x, y1: h.y, x2: h.x + Math.cos(a) * h.arm, y2: h.y + Math.sin(a) * h.arm, r: h.bar };
+    }
+    if (h.type === 'slide') {
+      const k = (1 - Math.cos(TAU * u)) / 2;         // 0→1→0 のなめらかな往復
+      const cx = h.ax + (h.bx - h.ax) * k;
+      const cy = h.ay + (h.by - h.ay) * k;
+      const dx = h.bx - h.ax, dy = h.by - h.ay;
+      const len = Math.hypot(dx, dy) || 1;
+      const px = -dy / len, py = dx / len;           // 進む向きと直角に棒を置く
+      const half = h.len / 2;
+      return { x1: cx - px * half, y1: cy - py * half, x2: cx + px * half, y2: cy + py * half, r: h.bar };
+    }
+    // pulse: ふくらむ玉 (長さ 0 のカプセル)
+    const k = (1 - Math.cos(TAU * u)) / 2;
+    return { x1: h.x, y1: h.y, x2: h.x, y2: h.y, r: h.min + (h.max - h.min) * k };
+  }
+
+  /** 邪魔ものまでの余裕。マイナスなら当たっている。 */
+  function hazardMargin(stage, x, y, ms, ringR) {
+    const r = ringR === undefined ? RING_R : ringR;
+    let best = Infinity;
+    for (const h of stage.hazards) {
+      const s = hazardShape(h, ms);
+      const d = segDist(x, y, s.x1, s.y1, s.x2, s.y2).d;
+      best = Math.min(best, d - s.r - r);
+    }
+    return best;
+  }
+
+  function buildHazard(stage, spec, s) {
+    const R = stage.corridor;
+    const bar = spec.bar || Math.max(9, Math.round(R * 0.3));
+    const p = pointAt(stage.path, s);
+    const d = tangentAt(stage.path, s);
+    const period = spec.period || 1800;
+    const phase = spec.phase || 0;
+
+    // どちら側に出すか。盤からはみ出す側なら、反対側に置きかえる
+    const reach = R + bar + RING_R + 30;
+    let side = spec.side || 1;
+    const out = (k) => ({ x: p.x - d.y * side * k, y: p.y + d.x * side * k });
+    const far = out(reach);
+    if (far.x < 8 || far.x > BOARD.w - 8 || far.y < 8 || far.y > BOARD.h - 8) side = -side;
+    const nx = -d.y * side;
+    const ny = d.x * side;
+
+    if (spec.type === 'slide') {
+      // 外に出た端では、中心線までの余裕が R + 16 残る = 必ず通れる
+      const span = R + bar + RING_R + 16;
+      return {
+        type: 'slide', s: s, ax: p.x, ay: p.y, bx: p.x + nx * span, by: p.y + ny * span,
+        len: spec.len || Math.round(R * 2.4), bar: bar, period: period, phase: phase
+      };
+    }
+    if (spec.type === 'rotor') {
+      // 支点はコースの外。中心線までの余裕が R + 12 あるので、支点は当たらない
+      const dist = R + bar + RING_R + 12;
+      return {
+        type: 'rotor', s: s, x: p.x + nx * dist, y: p.y + ny * dist,
+        arm: Math.round(dist + R * 0.7), bar: bar, period: period, phase: phase, dir: spec.dir || 1
+      };
+    }
+
+    /*
+     * pulse: 壁ぎわからふくらんでくる玉。
+     * 大きさは手で決めず、「どれだけふさぎ、どれだけ空けるか」から逆算する。
+     *   ふくらみきったとき … 中心線を 20 ぶんふさぐ
+     *   縮んだとき        … 中心線に 14 ぶんの余裕を残す
+     * こうすると「通れる時間の長さ」と「ふさぐ長さ」の釣り合いが、
+     * コースの太さが変わっても崩れない。
+     */
+    const offset = R + 10;
+    const max = offset - RING_R + 20;
+    const min = Math.max(4, offset - RING_R - 14);
+    return {
+      type: 'pulse', s: s, x: p.x + nx * offset, y: p.y + ny * offset,
+      min: min, max: max, bar: 0, period: period, phase: phase
+    };
+  }
+
+  /**
+   * 邪魔ものを置ける場所を、コースの上から全部ならべる。
+   *
+   * - 曲がり角から clear 以上はなれている (角のそばに置くと、角の内側と外側を
+   *   同時にふさいでしまい、どうやっても通れないコースになる)
+   * - スタート台・ゴール台から endClear 以上はなれている
+   *
+   * 置き場所を「探して選ぶ」のではなく「ならべて配る」ので、
+   * 手で座標を書かずに済み、邪魔ものどうしが重なることもない。
+   */
+  function hazardWindows(path, clear, endClear) {
+    const segs = [];
+    let acc = 0;
+    for (let i = 0; i + 1 < path.length; i++) {
+      const len = Math.hypot(path[i + 1][0] - path[i][0], path[i + 1][1] - path[i][1]);
+      segs.push({ start: acc, len: len });
+      acc += len;
+    }
+    const total = acc;
+    const out = [];
+    for (const seg of segs) {
+      if (seg.len < clear * 2 + 16) continue;
+      const lo = Math.max(seg.start + clear, endClear);
+      const hi = Math.min(seg.start + seg.len - clear, total - endClear);
+      if (hi < lo) continue;
+      out.push((lo + hi) / 2);
+    }
+    return out;
+  }
+
+  /** そのステージで、邪魔ものを置ける場所と、その条件。 */
+  function stageWindows(stage) {
+    const R = stage.corridor;
+    const bar = Math.max(9, Math.round(R * 0.3));
+    return {
+      bar: bar,
+      clear: R + bar + RING_R + 12,
+      endClear: Math.round(R * 2.4 + bar * 2 + 86),
+      list: hazardWindows(stage.path, R + bar + RING_R + 12, Math.round(R * 2.4 + bar * 2 + 86))
+    };
+  }
+
+  /** 邪魔ものが、いちばん近い曲がり角からどれだけ離れているか。 */
+  function cornerGap(stage, h) {
+    const path = stage.path;
+    let acc = 0, best = Infinity;
+    for (let i = 0; i < path.length; i++) {
+      if (i > 0) acc += Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]);
+      if (i === 0 || i === path.length - 1) continue;   // 端はスタート・ゴール
+      best = Math.min(best, Math.abs(h.s - acc));
+    }
+    return best;
+  }
+
+  /**
+   * ステージの邪魔ものを組み立てる。
+   * 置ける場所をならべて、そこへ端から端まで均等に配る。
+   */
+  /** 動いているあいだ、ずっと盤の中に収まっているか。 */
+  function hazardFits(h) {
+    const m = 4;
+    for (let ms = 0; ms < h.period; ms += 40) {
+      const sh = hazardShape(h, ms);
+      for (const p of [[sh.x1, sh.y1], [sh.x2, sh.y2]]) {
+        if (p[0] - sh.r < m || p[0] + sh.r > BOARD.w - m) return false;
+        if (p[1] - sh.r < m || p[1] + sh.r > BOARD.h - m) return false;
       }
     }
     return true;
   }
 
-  function levelUpCat(state, catId) {
-    const cat = state.cats.find((c) => c.id === catId);
-    if (!cat) return false;
-    const cost = catLevelCost(cat);
-    if (state.paw < cost) return false;
-    state.paw -= cost;
-    cat.level++;
-    return true;
-  }
-
-  function gacha(state, count, rng) {
-    const n = count === 10 ? 10 : 1;
-    const cost = n === 10 ? GACHA_COST_10 : GACHA_COST;
-    if (state.paw < cost) return null;
-    state.paw -= cost;
-    const got = [];
-    for (let i = 0; i < n; i++) {
-      // 10 連の最後は、レア以上が出ていなければレア以上を確定させる
-      const needRare = n === 10 && i === 9 && got.every((c) => c.rarity === 'N');
-      got.push(addCat(state, newCat(rng, needRare ? { minRarity: 'R' } : null)));
+  /**
+   * 置いた邪魔ものが「いつか」中心線をふさぐ範囲 (進んだ長さで [lo, hi])。
+   * この範囲が他の邪魔ものとかぶらなければ、どの一点も狙ってくるのは 1 つだけになる。
+   */
+  function blockedRange(stage, h) {
+    const total = pathLength(stage.path);
+    const r = RING_R + 6;
+    let lo = Infinity, hi = -Infinity;
+    for (let ms = 0; ms < h.period; ms += 40) {
+      const sh = hazardShape(h, ms);
+      for (let s = 0; s <= total; s += 12) {
+        const p = pointAt(stage.path, s);
+        if (segDist(p.x, p.y, sh.x1, sh.y1, sh.x2, sh.y2).d - sh.r - r < 0) {
+          if (s < lo) lo = s;
+          if (s > hi) hi = s;
+        }
+      }
     }
-    state.gachaCount += n;
-    return got;
+    return lo <= hi ? { lo: lo, hi: hi } : null;
   }
 
-  // ------------------------------------------------------------ 時間
+  function buildStages() {
+    for (const st of STAGES) {
+      const specs = st.specs || st.hazards;
+      st.specs = specs;
+      const win = stageWindows(st);
+      st.windows = win.list;
+      st.hazards = [];
+
+      const taken = {};
+      const zones = [];
+      const m = win.list.length;
+
+      let minIdx = 0;
+      for (let i = 0; i < specs.length; i++) {
+        const spec = specs[i];
+        // 置きたいのは「端から端まで均等」な位置。そこから近い順にためす。
+        // 前の邪魔ものより手前には戻さない (コースの順番を保つ)
+        const want = m === 0 ? 0
+          : (specs.length === 1 ? Math.floor(m / 2) : Math.round(i * (m - 1) / (specs.length - 1)));
+        const order = [];
+        for (let k = minIdx; k < m; k++) order.push(k);
+        order.sort((a2, b2) => Math.abs(a2 - want) - Math.abs(b2 - want) || a2 - b2);
+
+        let placed = null;
+        let placedIdx = -1;
+        for (const k of order) {
+          if (taken[k]) continue;
+          // 左右どちらに出すかは、巻きこむ範囲がせまいほうを選ぶ
+          let bestH = null;
+          for (const sd of [spec.side || 1, -(spec.side || 1)]) {
+            const h = buildHazard(st, { type: spec.type, side: sd, period: spec.period, phase: spec.phase, bar: spec.bar, len: spec.len, dir: spec.dir }, win.list[k]);
+            if (!hazardFits(h)) continue;         // 盤からはみ出す置き方はしない
+            const z = blockedRange(st, h);
+            if (!z) continue;                     // コースに絡まないなら置く意味がない
+            // ふさぐ範囲が広すぎる = コースの別の場所まで巻きこんでいる
+            if (z.hi - z.lo > MAX_ZONE) continue;
+            // ★ ふさぐ範囲が他とかぶらないこと。
+            //   どの一点も、同時に 2 つからは狙われない → 1 つずつ待てば必ず抜けられる
+            let clash = false;
+            for (const u of zones) {
+              if (z.lo <= u.hi + 24 && u.lo <= z.hi + 24) { clash = true; break; }
+            }
+            if (clash) continue;
+            h.zone = z;
+            if (!bestH || (z.hi - z.lo) < (bestH.zone.hi - bestH.zone.lo)) bestH = h;
+          }
+          if (bestH) { taken[k] = 1; zones.push(bestH.zone); placed = bestH; placedIdx = k; break; }
+        }
+        if (placed) { st.hazards.push(placed); minIdx = placedIdx + 1; }
+      }
+    }
+  }
+
+  buildStages();
+
+  // ------------------------------------------------------------ 判定
 
   /**
-   * 時間を進める。もうけも時計もここだけで動かすので、
-   * 表示と中身がズレることがない。
-   * @returns {number} このあいだにもうけた額
+   * スタート台・ゴール台の半径。コースより広くして、輪っかを置きやすくする。
+   * 台の中も安全地帯として扱う。そうしないと
+   * 「台の上に置いたのに、コースからはみ出して即アウト」になる。
    */
-  function tick(state, dtMs) {
-    const dt = Math.max(0, Math.min(dtMs, TICK_CAP_MS));
-    const sec = dt / 1000;
-    const earned = totalRate(state) * sec;
-    state.money += earned;
-    state.totalEarned += earned;
-    state.gameMinutes = (state.gameMinutes + sec * GAME_MIN_PER_SEC) % 1440;
-    state.playMs += dt;
-    return earned;
+  function padRadius(stage) { return stage.corridor + 22; }
+
+  function startPoint(stage) { return { x: stage.path[0][0], y: stage.path[0][1] }; }
+  function goalPoint(stage) {
+    const p = stage.path[stage.path.length - 1];
+    return { x: p[0], y: p[1] };
+  }
+
+  function inStart(stage, x, y) {
+    const p = startPoint(stage);
+    return Math.hypot(x - p.x, y - p.y) <= padRadius(stage);
+  }
+  function inGoal(stage, x, y) {
+    const p = goalPoint(stage);
+    return Math.hypot(x - p.x, y - p.y) <= padRadius(stage);
   }
 
   /**
-   * 留守中のもうけ。上限 8 時間、もらえるのは 4 割。
-   * state は変えない。受け取るときは claimOffline を呼ぶ。
+   * 壁までの余裕。マイナスなら当たっている。
+   * 安全なのは「中心線から corridor 以内」か「台の中」。
+   * 絵もこの 3 つをそのまま描くので、見た目と判定がズレない。
    */
-  function offlineReport(state, now) {
-    const elapsed = Math.max(0, (now || Date.now()) - state.lastSeen);
-    const capped = Math.min(elapsed, OFFLINE_CAP_MS);
-    const money = totalRate(state) * (capped / 1000) * OFFLINE_RATE;
-    const paw = Math.floor(capped / (30 * 60 * 1000));
-    return { elapsedMs: elapsed, cappedMs: capped, money: money, paw: paw };
+  function wallMargin(stage, x, y, ringR) {
+    const r = ringR === undefined ? RING_R : ringR;
+    const pad = padRadius(stage);
+    const sp = stage.path[0];
+    const gp = stage.path[stage.path.length - 1];
+    const a = stage.corridor - nearestOnPath(stage.path, x, y).d;
+    const b = pad - Math.hypot(x - sp[0], y - sp[1]);
+    const c = pad - Math.hypot(x - gp[0], y - gp[1]);
+    return Math.max(a, b, c) - r;
   }
 
-  function claimOffline(state, report) {
-    state.money += report.money;
-    state.totalEarned += report.money;
-    state.paw += report.paw;
-    state.gameMinutes = (state.gameMinutes + (report.cappedMs / 1000) * GAME_MIN_PER_SEC) % 1440;
-  }
-
-  /** タップ 1 回のごほうび = 1 秒ぶんのもうけ (最低 1 円)。 */
-  function tapReward(state) {
-    state.taps++;
-    return Math.max(1, Math.floor(totalRate(state)));
-  }
-
-  /** 部署の上に浮かぶあわ。ときどき にくきゅう が出る。 */
-  function bubbleReward(state, roomId, rng) {
-    if (rng() < 0.12) return { kind: 'paw', amount: 1 + Math.floor(rng() * 3) };
-    const rate = roomRate(state, roomId) * boostMultiplier(state);
-    return { kind: 'money', amount: Math.max(5, Math.floor(rate * 30)) };
-  }
-
-  function claimBubble(state, reward) {
-    if (reward.kind === 'paw') state.paw += reward.amount;
-    else { state.money += reward.amount; state.totalEarned += reward.amount; }
-  }
-
-  // ------------------------------------------------------------ ごほうび
-
-  /** 工場レベルが上がったぶんだけ にくきゅう を配る。何回呼んでも二重にならない。 */
-  function claimLevelRewards(state) {
-    const level = factoryLevel(state);
-    if (level <= state.rewardedLevel) return 0;
-    const gained = level - state.rewardedLevel;
-    state.rewardedLevel = level;
-    state.paw += gained;
-    return gained;
-  }
-
-  /** 新しく達成したものを返し、ごほうびを渡す。 */
-  function claimAchievements(state) {
-    const fresh = [];
-    for (const a of ACHIEVEMENTS) {
-      if (state.done[a.id]) continue;
-      if (!a.test(state)) continue;
-      state.done[a.id] = 1;
-      state.paw += a.paw;
-      fresh.push(a);
-    }
-    return fresh;
-  }
-
-  /** まだ手をつけていないことがあるか (下のボタンの赤い印に使う)。 */
-  function badges(state) {
-    const canBuy = ROOMS.some((def) => isUnlocked(state, def.id) && state.money >= upgradeCost(state, def.id));
-    const canGacha = state.paw >= GACHA_COST;
-    const canLevel = state.cats.some((c) => state.paw >= catLevelCost(c));
-    const hasIdle = state.cats.some((c) => c.room === null) && findOpenRoom(state) !== null;
-    const canAchieve = ACHIEVEMENTS.some((a) => !state.done[a.id] && a.test(state));
+  /**
+   * いまの一手をまとめて調べる。画面はこの結果だけ見ればいい。
+   * @returns {{hit:(''|'wall'|'hazard'), margin:number, wall:number, hazard:number, progress:number}}
+   */
+  function probe(stage, x, y, ms, ringR) {
+    const near = nearestOnPath(stage.path, x, y);
+    const r = ringR === undefined ? RING_R : ringR;
+    const wall = wallMargin(stage, x, y, r);
+    const haz = stage.hazards.length ? hazardMargin(stage, x, y, ms, r) : Infinity;
+    const total = pathLength(stage.path);
     return {
-      rooms: canBuy,
-      cats: canLevel || hasIdle,
-      gacha: canGacha,
-      awards: canAchieve
+      hit: wall < 0 ? 'wall' : (haz < 0 ? 'hazard' : ''),
+      wall: wall,
+      hazard: haz,
+      margin: Math.min(wall, haz),
+      progress: total > 0 ? clamp(near.s / total, 0, 1) : 0
     };
+  }
+
+  // ------------------------------------------------------------ 通れることの証明
+
+  /**
+   * 中心線の上だけを歩く自動プレイヤーが、ゴールに着けるかを全部調べる。
+   *
+   * 「どこに・いつ居られるか」を 1 コマずつ塗りつぶしていく (到達可能性の探索)。
+   * 貪欲に前へ進むのではなく、待つ・下がるを含めた全部の動きを同時に試すので、
+   * 「人間なら通せるのにゴーストが失敗する」ということが起きない。
+   *
+   * ステージを足したらテストがこれを回す。通れないコースは置けない。
+   */
+  function ghostRun(stage, opts) {
+    const o = opts || {};
+    const dt = o.dt || 32;                                   // 1 コマの長さ (ms)
+    const cell = o.cell || 12;                               // 1 コマで進める距離
+    const ringR = RING_R + (o.margin === undefined ? 4 : o.margin);
+    const limit = o.limit || 40000;
+    const total = pathLength(stage.path);
+    const n = Math.max(2, Math.ceil(total / cell) + 1);
+
+    const pts = [];
+    for (let i = 0; i < n; i++) pts.push(pointAt(stage.path, Math.min(total, i * cell)));
+
+    const safeRow = (ms) => {
+      const row = new Uint8Array(n);
+      for (let i = 0; i < n; i++) {
+        row[i] = hazardMargin(stage, pts[i].x, pts[i].y, ms, ringR) >= 0 ? 1 : 0;
+      }
+      return row;
+    };
+
+    let cur = new Uint8Array(n);
+    if (!safeRow(0)[0]) return { cleared: false, timeMs: 0, reason: 'スタート台が危ない' };
+    cur[0] = 1;
+
+    const steps = Math.ceil(limit / dt);
+    for (let t = 1; t <= steps; t++) {
+      const ms = t * dt;
+      const row = safeRow(ms);
+      const next = new Uint8Array(n);
+      let any = false;
+      for (let i = 0; i < n; i++) {
+        if (!cur[i]) continue;
+        for (let j = i - 1; j <= i + 1; j++) {
+          if (j < 0 || j >= n || next[j] || !row[j]) continue;
+          next[j] = 1;
+          any = true;
+        }
+      }
+      if (!any) return { cleared: false, timeMs: ms, reason: 'ふさがった' };
+      if (next[n - 1]) return { cleared: true, timeMs: ms };
+      cur = next;
+    }
+    return { cleared: false, timeMs: limit, reason: '時間切れ' };
+  }
+
+  /** 邪魔ものがコースに絡んでいるか (絡まないものはただの飾り)。 */
+  function hazardBites(stage, h) {
+    return !!blockedRange(stage, h);
+  }
+
+  /** スタート台とゴール台に、邪魔ものが入ってこないか。 */
+  function padsSafe(stage) {
+    const pads = [startPoint(stage), goalPoint(stage)];
+    const reach = padRadius(stage) + RING_R;
+    for (const h of stage.hazards) {
+      for (let ms = 0; ms < h.period; ms += 20) {
+        const sh = hazardShape(h, ms);
+        for (const pad of pads) {
+          if (segDist(pad.x, pad.y, sh.x1, sh.y1, sh.x2, sh.y2).d - sh.r < reach) return false;
+        }
+      }
+    }
+    return true;
   }
 
   // ------------------------------------------------------------ セーブ
 
-  function newGame(seed) {
-    const s = {
+  function newSave() {
+    return {
       version: SAVE_VERSION,
-      seed: (seed === undefined ? (Math.random() * 4294967296) >>> 0 : seed) >>> 0,
-      money: 0,
-      paw: 12,
-      totalEarned: 0,
-      taps: 0,
-      gachaCount: 0,
-      playMs: 0,
-      gameMinutes: START_GAME_MIN,
-      rooms: {},
-      cats: [],
-      done: {},
-      rewardedLevel: 0,
-      lastSeen: Date.now()
+      best: {},        // ステージ id → いちばん速かったミリ秒
+      unlocked: 1,     // ひらいているステージ数
+      tries: 0,
+      clears: 0,
+      muted: false
     };
-    s.rooms.gohan = 1;
-    const rng = mulberry32(s.seed);
-    addCat(s, newCat(rng));
-    s.rewardedLevel = factoryLevel(s);
-    return s;
   }
 
-  function serialize(state) {
-    return JSON.stringify(state);
+  function stageIndex(id) {
+    for (let i = 0; i < STAGES.length; i++) if (STAGES[i].id === id) return i;
+    return -1;
   }
 
-  /**
-   * 読み込み。壊れていたり、項目が足りなくても新品の値で埋めて必ず動かす。
-   * 「セーブが壊れると開けない」を仕組みで防ぐ。
-   */
-  function deserialize(text, fallbackSeed) {
-    const base = newGame(fallbackSeed);
+  function isUnlocked(save, index) { return index >= 0 && index < save.unlocked; }
+
+  /** クリアを記録する。次のステージをひらき、自己ベストなら true を返す。 */
+  function recordClear(save, stageId, ms) {
+    const i = stageIndex(stageId);
+    if (i < 0) return { best: false, ms: ms };
+    save.clears++;
+    if (save.unlocked < i + 2) save.unlocked = Math.min(STAGES.length, i + 2);
+    const prev = save.best[stageId];
+    if (prev === undefined || ms < prev) {
+      save.best[stageId] = ms;
+      return { best: true, ms: ms, prev: prev };
+    }
+    return { best: false, ms: ms, prev: prev };
+  }
+
+  function recordTry(save) { save.tries++; }
+
+  function serialize(save) { return JSON.stringify(save); }
+
+  /** 壊れたセーブでも必ず開ける。足りない所は新品の値で埋める。 */
+  function deserialize(text) {
+    const s = newSave();
     let raw;
-    try {
-      raw = JSON.parse(text);
-    } catch (e) {
-      return base;
-    }
-    if (!raw || typeof raw !== 'object') return base;
+    try { raw = JSON.parse(text); } catch (e) { return s; }
+    if (!raw || typeof raw !== 'object') return s;
 
-    const s = base;
-    if (Number.isFinite(raw.seed)) s.seed = raw.seed >>> 0;
-    for (const key of ['money', 'paw', 'totalEarned', 'taps', 'gachaCount', 'playMs', 'rewardedLevel']) {
-      if (Number.isFinite(raw[key]) && raw[key] >= 0) s[key] = raw[key];
-    }
-    if (Number.isFinite(raw.gameMinutes)) s.gameMinutes = ((raw.gameMinutes % 1440) + 1440) % 1440;
-    if (Number.isFinite(raw.lastSeen) && raw.lastSeen > 0) s.lastSeen = raw.lastSeen;
-
-    s.rooms = {};
-    if (raw.rooms && typeof raw.rooms === 'object') {
-      const rooms = {};
-      for (const key of Object.keys(raw.rooms)) rooms[OLD_ROOM_IDS[key] || key] = raw.rooms[key];
-      for (const def of ROOMS) {
-        const level = rooms[def.id];
-        if (Number.isFinite(level) && level > 0) s.rooms[def.id] = Math.floor(level);
+    if (raw.best && typeof raw.best === 'object') {
+      for (const st of STAGES) {
+        const v = raw.best[st.id];
+        if (Number.isFinite(v) && v > 0) s.best[st.id] = v;
       }
     }
-    if (!builtRooms(s).length) s.rooms.gohan = 1;
-
-    s.cats = [];
-    if (Array.isArray(raw.cats)) {
-      for (const c of raw.cats) {
-        if (!c || typeof c.id !== 'string') continue;
-        const moved = OLD_ROOM_IDS[c.room] || c.room;
-        const room = roomDef(moved) && s.rooms[moved] > 0 ? moved : null;
-        s.cats.push({
-          id: c.id,
-          name: typeof c.name === 'string' ? c.name : NAMES[0],
-          kind: kindDef(c.kind).id,
-          rarity: rarityDef(c.rarity).id,
-          level: Number.isFinite(c.level) && c.level >= 1 ? Math.floor(c.level) : 1,
-          room: room,
-          face: Number.isFinite(c.face) ? c.face & 3 : 0
-        });
-      }
+    if (Number.isFinite(raw.unlocked)) s.unlocked = clamp(Math.floor(raw.unlocked), 1, STAGES.length);
+    // 記録があるなら、その次まではひらいているはず (セーブが古くても辻褄を合わせる)
+    for (let i = 0; i < STAGES.length; i++) {
+      if (s.best[STAGES[i].id] !== undefined) s.unlocked = Math.max(s.unlocked, Math.min(STAGES.length, i + 2));
     }
-    // 席あふれを直す (部署をせまくしてもセーブが壊れないように)
-    for (const def of ROOMS) {
-      const inRoom = catsIn(s, def.id);
-      for (let i = def.slots; i < inRoom.length; i++) inRoom[i].room = null;
+    for (const key of ['tries', 'clears']) {
+      if (Number.isFinite(raw[key]) && raw[key] >= 0) s[key] = Math.floor(raw[key]);
     }
-    if (!s.cats.length) addCat(s, newCat(mulberry32(s.seed)));
-
-    s.done = {};
-    if (raw.done && typeof raw.done === 'object') {
-      for (const a of ACHIEVEMENTS) if (raw.done[a.id]) s.done[a.id] = 1;
-    }
-    if (s.rewardedLevel > factoryLevel(s)) s.rewardedLevel = factoryLevel(s);
+    s.muted = !!raw.muted;
     return s;
   }
 
   // ------------------------------------------------------------ 見せ方
 
-  /** 3 けたごとにカンマ。1 兆からは 兆/京/垓 でまとめる。 */
-  function formatNumber(value) {
-    if (!isFinite(value)) return '∞';
-    const n = Math.floor(Math.abs(value));
-    const sign = value < 0 ? '-' : '';
-    if (n < 1e12) return sign + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    const units = [[1e20, '垓'], [1e16, '京'], [1e12, '兆']];
-    for (const u of units) {
-      if (n >= u[0]) {
-        const x = n / u[0];
-        const text = x >= 100 ? x.toFixed(0) : x >= 10 ? x.toFixed(1) : x.toFixed(2);
-        return sign + text.replace(/\.?0+$/, '') + u[1];
-      }
+  /** 12.34 のように、秒とその下 2 けた。 */
+  function formatTime(ms) {
+    if (!isFinite(ms) || ms < 0) return '--.--';
+    const total = Math.floor(ms);
+    const sec = Math.floor(total / 1000);
+    const cs = Math.floor((total % 1000) / 10);
+    if (sec >= 60) {
+      const m = Math.floor(sec / 60);
+      return m + ':' + String(sec % 60).padStart(2, '0') + '.' + String(cs).padStart(2, '0');
     }
-    return sign + String(n);
+    return sec + '.' + String(cs).padStart(2, '0');
   }
 
-  /** 10 秒あたりのもうけ。画面の上に出る「◯◯ /10s」。 */
-  function formatRate(state) {
-    return formatNumber(totalRate(state) * 10);
-  }
-
-  /** ゲーム内の時計。朝・昼・夕・夜のどれかも返す。 */
-  function gameClock(state) {
-    const total = ((state.gameMinutes % 1440) + 1440) % 1440;
-    const h = Math.floor(total / 60);
-    const m = Math.floor(total % 60);
-    let phase = 'night';
-    if (h >= 5 && h < 9) phase = 'morning';
-    else if (h >= 9 && h < 17) phase = 'day';
-    else if (h >= 17 && h < 19) phase = 'evening';
-    return {
-      h: h, m: m, phase: phase,
-      text: String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0')
-    };
-  }
-
-  /** 留守の長さを「◯時間◯分」で。 */
-  function formatDuration(ms) {
-    const total = Math.floor(ms / 1000);
-    const h = Math.floor(total / 3600);
-    const m = Math.floor((total % 3600) / 60);
-    if (h > 0) return h + ' 時間 ' + m + ' 分';
-    if (m > 0) return m + ' 分';
-    return Math.max(1, total) + ' 秒';
-  }
-
-  // ------------------------------------------------------------ アイソメトリック
-
-  /** 升目の座標 → 画面の座標。z は高さ (上に上がる)。 */
-  function iso(x, y, z) {
-    return {
-      x: (x - y) * (TILE.w / 2),
-      y: (x + y) * (TILE.h / 2) - (z || 0)
-    };
-  }
-
-  /** 点の並びを SVG の polygon 用の文字列にする。 */
-  function isoPoly(points) {
-    return points.map(function (p) {
-      const q = iso(p[0], p[1], p[2]);
-      return q.x.toFixed(2) + ',' + q.y.toFixed(2);
-    }).join(' ');
-  }
-
-  /** 升目ぜんたいが収まる四角。カメラの初期位置に使う。 */
-  function sceneBounds() {
-    const corners = [iso(0, 0, TILE.wall + 30), iso(GRID.w, 0, 0), iso(0, GRID.h, 0), iso(GRID.w, GRID.h, -20)];
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (const c of corners) {
-      minX = Math.min(minX, c.x); maxX = Math.max(maxX, c.x);
-      minY = Math.min(minY, c.y); maxY = Math.max(maxY, c.y);
-    }
-    return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
-  }
-
-  /** ベルトコンベアが通る位置。持ち場と同じく、部屋の左上からの相対座標。 */
-  function beltLine(def) {
-    return { y: def.h / 2, x0: 1.35, x1: def.w - 0.55 };
-  }
-
-  /**
-   * 持ち場の位置 (升目の相対座標)。ベルトをはさんで両側に立つ。
-   * side が -1 なら奥がわ、+1 なら手前がわ。
-   * 数がいくつでも部屋からはみ出さないように、幅から割り出す。
-   */
-  function slotPositions(def) {
-    const n = def.slots;
-    const cols = Math.ceil(n / 2);
-    const midY = def.h / 2;
-    const gap = Math.min(0.95, midY - 0.35);
-    const out = [];
-    for (let i = 0; i < n; i++) {
-      const col = i % cols;
-      const side = i < cols ? -1 : 1;
-      out.push({
-        x: 1.35 + (def.w - 2.05) * (cols === 1 ? 0.5 : col / (cols - 1)),
-        y: midY + side * gap,
-        side: side
-      });
-    }
-    return out;
+  /** 中心線を SVG の d 属性にする。太らせるのは stroke-width にまかせる。 */
+  function pathD(path) {
+    return path.map((p, i) => (i ? 'L' : 'M') + p[0] + ',' + p[1]).join(' ');
   }
 
   // ------------------------------------------------------------ 出口
@@ -686,72 +664,52 @@
   return {
     SAVE_KEY: SAVE_KEY,
     SAVE_VERSION: SAVE_VERSION,
-    TILE: TILE,
-    GRID: GRID,
-    ROOMS: ROOMS,
-    RARITIES: RARITIES,
-    KINDS: KINDS,
-    NAMES: NAMES,
-    ACHIEVEMENTS: ACHIEVEMENTS,
-    GACHA_COST: GACHA_COST,
-    GACHA_COST_10: GACHA_COST_10,
-    OFFLINE_CAP_MS: OFFLINE_CAP_MS,
-    OFFLINE_RATE: OFFLINE_RATE,
+    BOARD: BOARD,
+    RING_R: RING_R,
+    STICK: STICK,
+    NEAR: NEAR,
+    STAGES: STAGES,
 
-    mulberry32: mulberry32,
-    pick: pick,
-    weighted: weighted,
+    clamp: clamp,
+    segDist: segDist,
+    segCross: segCross,
+    segSegDist: segSegDist,
+    pathSegments: pathSegments,
+    pathLength: pathLength,
+    nearestOnPath: nearestOnPath,
+    pointAt: pointAt,
+    tangentAt: tangentAt,
+    buildHazard: buildHazard,
+    hazardWindows: hazardWindows,
+    stageWindows: stageWindows,
+    blockedRange: blockedRange,
+    hazardFits: hazardFits,
+    cornerGap: cornerGap,
 
-    roomDef: roomDef,
-    rarityDef: rarityDef,
-    kindDef: kindDef,
-    roomLevel: roomLevel,
-    builtRooms: builtRooms,
-    catsIn: catsIn,
+    hazardShape: hazardShape,
+    hazardMargin: hazardMargin,
+    wallMargin: wallMargin,
+    probe: probe,
 
-    factoryLevel: factoryLevel,
-    catPower: catPower,
-    roomCatBonus: roomCatBonus,
-    boostMultiplier: boostMultiplier,
-    roomRate: roomRate,
-    totalRate: totalRate,
-    upgradeCost: upgradeCost,
+    startPoint: startPoint,
+    goalPoint: goalPoint,
+    padRadius: padRadius,
+    inStart: inStart,
+    inGoal: inGoal,
+
+    ghostRun: ghostRun,
+    hazardBites: hazardBites,
+    padsSafe: padsSafe,
+
+    newSave: newSave,
+    stageIndex: stageIndex,
     isUnlocked: isUnlocked,
-    affordableLevels: affordableLevels,
-    catLevelCost: catLevelCost,
-
-    newCat: newCat,
-    addCat: addCat,
-    assignCat: assignCat,
-    findOpenRoom: findOpenRoom,
-    buyUpgrade: buyUpgrade,
-    levelUpCat: levelUpCat,
-    gacha: gacha,
-
-    tick: tick,
-    offlineReport: offlineReport,
-    claimOffline: claimOffline,
-    tapReward: tapReward,
-    bubbleReward: bubbleReward,
-    claimBubble: claimBubble,
-
-    claimLevelRewards: claimLevelRewards,
-    claimAchievements: claimAchievements,
-    badges: badges,
-
-    newGame: newGame,
+    recordClear: recordClear,
+    recordTry: recordTry,
     serialize: serialize,
     deserialize: deserialize,
 
-    formatNumber: formatNumber,
-    formatRate: formatRate,
-    gameClock: gameClock,
-    formatDuration: formatDuration,
-
-    iso: iso,
-    isoPoly: isoPoly,
-    sceneBounds: sceneBounds,
-    beltLine: beltLine,
-    slotPositions: slotPositions
+    formatTime: formatTime,
+    pathD: pathD
   };
 });

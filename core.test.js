@@ -2,439 +2,332 @@ const test = require('node:test');
 const assert = require('node:assert');
 const C = require('./core.js');
 
-// ------------------------------------------------------------ 乱数
+// ------------------------------------------------------------ 幾何
 
-test('同じ seed からは同じ並びが出る', () => {
-  const a = C.mulberry32(42);
-  const b = C.mulberry32(42);
-  for (let i = 0; i < 20; i++) assert.strictEqual(a(), b());
+test('点と線分の距離', () => {
+  assert.strictEqual(C.segDist(0, 0, -10, 5, 10, 5).d, 5);      // 線分の内側に落ちる
+  assert.strictEqual(C.segDist(-20, 5, -10, 5, 10, 5).d, 10);   // 端からはみ出したら端まで
+  assert.strictEqual(C.segDist(0, 0, 3, 4, 3, 4).d, 5);         // 長さ 0 の線分
 });
 
-test('weighted は必ず候補のどれかを返す', () => {
-  const rng = C.mulberry32(9);
-  for (let i = 0; i < 500; i++) {
-    const r = C.weighted(rng, C.RARITIES);
-    assert.ok(C.RARITIES.includes(r));
+test('線分どうしの距離は、交わっていれば 0', () => {
+  assert.strictEqual(C.segSegDist([0, 0], [10, 0], [5, -5], [5, 5]), 0);
+  assert.strictEqual(C.segSegDist([0, 0], [10, 0], [0, 7], [10, 7]), 7);
+});
+
+test('折れ線の長さ', () => {
+  assert.strictEqual(C.pathLength([[0, 0], [30, 0], [30, 40]]), 70);
+});
+
+test('進んだ長さと、その場所は行き来できる', () => {
+  const path = [[0, 0], [100, 0], [100, 100], [200, 100]];
+  const total = C.pathLength(path);
+  for (let s = 0; s <= total; s += 17) {
+    const p = C.pointAt(path, s);
+    const back = C.nearestOnPath(path, p.x, p.y);
+    assert.ok(back.d < 1e-6, `中心線の上なのに離れている: ${back.d}`);
+    assert.ok(Math.abs(back.s - s) < 1e-6, `進んだ長さが合わない: ${back.s} != ${s}`);
   }
 });
 
-test('weighted に minIndex を渡すと、それより下は出ない', () => {
-  const rng = C.mulberry32(3);
-  for (let i = 0; i < 300; i++) {
-    assert.notStrictEqual(C.weighted(rng, C.RARITIES, 1).id, 'N');
+test('中心線からはみ出した所は、距離が正しく出る', () => {
+  const path = [[0, 0], [100, 0]];
+  assert.strictEqual(Math.round(C.nearestOnPath(path, 50, 30).d), 30);
+  assert.strictEqual(Math.round(C.nearestOnPath(path, 130, 0).d), 30);
+});
+
+// ------------------------------------------------------------ 当たり判定
+
+test('中心線の上がいちばん余裕がある', () => {
+  const st = C.STAGES[0];
+  const p = C.pointAt(st.path, 300);
+  assert.strictEqual(Math.round(C.wallMargin(st, p.x, p.y)), st.corridor - C.RING_R);
+});
+
+test('壁をこえたら当たり', () => {
+  const st = C.STAGES[0];
+  const p = C.pointAt(st.path, 300);
+  const t = C.tangentAt(st.path, 300);
+  const nx = -t.y, ny = t.x;
+  const just = st.corridor - C.RING_R - 1;
+  const over = st.corridor - C.RING_R + 1;
+  assert.strictEqual(C.probe(st, p.x + nx * just, p.y + ny * just, 0).hit, '');
+  assert.strictEqual(C.probe(st, p.x + nx * over, p.y + ny * over, 0).hit, 'wall');
+});
+
+test('進みぐあいは 0 から 1 まで', () => {
+  const st = C.STAGES[0];
+  const a = C.startPoint(st), b = C.goalPoint(st);
+  assert.ok(C.probe(st, a.x, a.y, 0).progress < 0.01);
+  assert.ok(C.probe(st, b.x, b.y, 0).progress > 0.99);
+});
+
+test('スタート台とゴール台の判定', () => {
+  const st = C.STAGES[0];
+  const a = C.startPoint(st), b = C.goalPoint(st);
+  assert.ok(C.inStart(st, a.x, a.y));
+  assert.ok(!C.inGoal(st, a.x, a.y));
+  assert.ok(C.inGoal(st, b.x, b.y));
+  assert.ok(!C.inStart(st, a.x + C.padRadius(st) + 2, a.y));
+});
+
+// ------------------------------------------------------------ 邪魔もの
+
+test('往復する棒は、両はしまでちゃんと行き来する', () => {
+  const h = C.STAGES[1].hazards[0];
+  let nearA = Infinity, nearB = Infinity;
+  for (let ms = 0; ms < h.period; ms += 10) {
+    const s = C.hazardShape(h, ms);
+    const cx = (s.x1 + s.x2) / 2, cy = (s.y1 + s.y2) / 2;
+    nearA = Math.min(nearA, Math.hypot(cx - h.ax, cy - h.ay));
+    nearB = Math.min(nearB, Math.hypot(cx - h.bx, cy - h.by));
+  }
+  assert.ok(nearA < 2 && nearB < 2, `端まで行っていない A=${nearA} B=${nearB}`);
+});
+
+test('回る腕は、支点からいつも同じ長さ', () => {
+  const h = C.STAGES[2].hazards.find((x) => x.type === 'rotor');
+  for (let ms = 0; ms < h.period; ms += 37) {
+    const s = C.hazardShape(h, ms);
+    assert.ok(Math.abs(Math.hypot(s.x2 - s.x1, s.y2 - s.y1) - h.arm) < 1e-9);
   }
 });
 
-// ------------------------------------------------------------ 数のしくみ
-
-test('工場レベルは「部署のレベル合計 + ねこの数 + 1」', () => {
-  const s = C.newGame(1);
-  s.rooms = { gohan: 5, kumitate: 3 };
-  s.cats = [{ id: 'a', rarity: 'N', level: 1, room: null }, { id: 'b', rarity: 'N', level: 1, room: null }];
-  assert.strictEqual(C.factoryLevel(s), 5 + 3 + 2 + 1);
+test('ふくらむ玉は min と max のあいだを動く', () => {
+  const h = C.STAGES[2].hazards.find((x) => x.type === 'pulse');
+  let lo = Infinity, hi = -Infinity;
+  for (let ms = 0; ms < h.period; ms += 10) {
+    const r = C.hazardShape(h, ms).r;
+    lo = Math.min(lo, r); hi = Math.max(hi, r);
+  }
+  assert.ok(Math.abs(lo - h.min) < .5 && Math.abs(hi - h.max) < .5, `${lo}..${hi}`);
 });
 
-test('ねこがいない部署の倍率は 1 倍', () => {
-  const s = C.newGame(1);
-  s.cats = [];
-  assert.strictEqual(C.roomCatBonus(s, 'gohan'), 1);
-  assert.strictEqual(C.roomRate(s, 'gohan'), C.roomDef('gohan').baseRate * 1);
-});
-
-test('ねこの力はレア度とレベルで上がる', () => {
-  const n1 = C.catPower({ rarity: 'N', level: 1 });
-  const n2 = C.catPower({ rarity: 'N', level: 2 });
-  const ur = C.catPower({ rarity: 'UR', level: 1 });
-  assert.ok(n2 > n1, 'レベルを上げると強くなる');
-  assert.ok(ur > n1, 'レア度が高いと強い');
-  assert.strictEqual(n2, n1 * 1.25);
-});
-
-test('建てていない部署はもうけを出さない', () => {
-  const s = C.newGame(1);
-  assert.strictEqual(C.roomLevel(s, 'kumitate'), 0);
-  assert.strictEqual(C.roomRate(s, 'kumitate'), 0);
-});
-
-test('きゅうけい室はもうけ 0、そのかわり全体の倍率を上げる', () => {
-  const s = C.newGame(1);
-  s.cats = [];
-  s.rooms = { gohan: 10 };
-  const before = C.totalRate(s);
-  s.rooms.kyukei = 5;
-  assert.strictEqual(C.roomRate(s, 'kyukei'), 0);
-  assert.ok(C.totalRate(s) > before, 'きゅうけい室を建てると全体が増える');
-  assert.strictEqual(C.boostMultiplier(s), 1 + 5 * C.roomDef('kyukei').boostPerLevel);
-});
-
-test('値段はレベルが上がるほど高くなる', () => {
-  const s = C.newGame(1);
-  const first = C.upgradeCost(s, 'kumitate');
-  s.rooms.kumitate = 10;
-  assert.ok(C.upgradeCost(s, 'kumitate') > first);
-});
-
-test('買えるだけ買う計算は、実際に買った結果と一致する', () => {
-  const s = C.newGame(1);
-  s.rooms.gohan = 1;
-  s.money = 100000;
-  const plan = C.affordableLevels(s, 'gohan', s.money);
-  const before = s.money;
-  let bought = 0;
-  while (C.buyUpgrade(s, 'gohan')) bought++;
-  assert.strictEqual(bought, plan.levels);
-  assert.strictEqual(before - s.money, plan.cost);
-});
-
-// ------------------------------------------------------------ 買う・配る
-
-test('お金が足りないと買えないし、減りもしない', () => {
-  const s = C.newGame(1);
-  s.money = 0;
-  assert.strictEqual(C.buyUpgrade(s, 'gohan'), false);
-  assert.strictEqual(s.money, 0);
-  assert.strictEqual(C.roomLevel(s, 'gohan'), 1);
-});
-
-test('工場レベルが足りない部署は買えない', () => {
-  const s = C.newGame(1);
-  s.money = Infinity;
-  assert.strictEqual(C.isUnlocked(s, 'shukka'), false);
-  assert.strictEqual(C.buyUpgrade(s, 'shukka'), false);
-});
-
-test('席の数より多くは配属できない', () => {
-  const s = C.newGame(1);
-  s.cats = [];
-  const def = C.roomDef('gohan');
-  const rng = C.mulberry32(5);
-  for (let i = 0; i < def.slots + 2; i++) s.cats.push(C.newCat(rng));
-  for (const cat of s.cats) cat.room = null;
-  let ok = 0;
-  for (const cat of s.cats) if (C.assignCat(s, cat.id, 'gohan')) ok++;
-  assert.strictEqual(ok, def.slots);
-  assert.strictEqual(C.catsIn(s, 'gohan').length, def.slots);
-});
-
-test('ねこのレベル上げはにくきゅうを払い、足りなければ何も起きない', () => {
-  const s = C.newGame(1);
-  const cat = s.cats[0];
-  const cost = C.catLevelCost(cat);
-  s.paw = cost - 1;
-  assert.strictEqual(C.levelUpCat(s, cat.id), false);
-  assert.strictEqual(cat.level, 1);
-  s.paw = cost;
-  assert.strictEqual(C.levelUpCat(s, cat.id), true);
-  assert.strictEqual(cat.level, 2);
-  assert.strictEqual(s.paw, 0);
-});
-
-test('ガチャはにくきゅうが足りないと引けない', () => {
-  const s = C.newGame(1);
-  s.paw = C.GACHA_COST - 1;
-  assert.strictEqual(C.gacha(s, 1, C.mulberry32(1)), null);
-  assert.strictEqual(s.cats.length, 1);
-});
-
-test('10 連は必ずレア以上が 1 ぴき入る', () => {
-  for (let seed = 1; seed <= 40; seed++) {
-    const s = C.newGame(seed);
-    s.paw = C.GACHA_COST_10;
-    const got = C.gacha(s, 10, C.mulberry32(seed));
-    assert.strictEqual(got.length, 10);
-    assert.ok(got.some((c) => c.rarity !== 'N'), `seed ${seed} でレアが出ていない`);
+test('邪魔ものの置き場所は、角と両はしから離れた直線の途中だけ', () => {
+  const path = [[0, 0], [400, 0], [400, 400]];   // 400 の所が曲がり角
+  const wins = C.hazardWindows(path, 80, 60);
+  assert.ok(wins.length > 0);
+  for (const s of wins) {
+    assert.ok(Math.abs(s - 400) >= 80, `角に寄りすぎ: ${s}`);
+    assert.ok(s >= 60 && s <= C.pathLength(path) - 60, `端に寄りすぎ: ${s}`);
   }
 });
 
-test('あぶれたねこは、部署を建てると席につく', () => {
-  const s = C.newGame(1);
-  s.cats = [];
-  const rng = C.mulberry32(2);
-  for (let i = 0; i < 8; i++) C.addCat(s, C.newCat(rng));
-  const idle = s.cats.filter((c) => c.room === null).length;
-  assert.ok(idle > 0, 'ごはん工房の持ち場は 3 つなので、あぶれるはず');
-  s.rooms.kumitate = 0;
-  s.money = C.upgradeCost(s, 'kumitate');
-  s.rooms.gohan = 20; // 工場レベルを上げて解放する
-  assert.strictEqual(C.buyUpgrade(s, 'kumitate'), true);
-  assert.ok(C.catsIn(s, 'kumitate').length > 0, '建てた部署にねこが入る');
+test('短い区間には置き場所を作らない', () => {
+  assert.deepStrictEqual(C.hazardWindows([[0, 0], [100, 0]], 80, 10), []);
 });
 
-// ------------------------------------------------------------ 時間
+// ------------------------------------------------------------ ステージが遊べる形か
 
-test('tick のもうけは「もうけ/秒 × 秒」ちょうど', () => {
-  const s = C.newGame(1);
-  const rate = C.totalRate(s);
-  const earned = C.tick(s, 1000);
-  assert.ok(Math.abs(earned - rate) < 1e-9);
-  assert.ok(Math.abs(s.money - rate) < 1e-9);
-  assert.ok(Math.abs(s.totalEarned - rate) < 1e-9);
-});
-
-test('とても大きい dt が来ても、進むのは上限まで', () => {
-  const a = C.newGame(1);
-  const b = C.newGame(1);
-  C.tick(a, 1000 * 60 * 60 * 24);
-  C.tick(b, 4000);
-  assert.strictEqual(a.money, b.money);
-});
-
-test('負の dt では時間が戻らない', () => {
-  const s = C.newGame(1);
-  const before = s.gameMinutes;
-  assert.strictEqual(C.tick(s, -5000), 0);
-  assert.strictEqual(s.money, 0);
-  assert.strictEqual(s.gameMinutes, before);
-});
-
-test('留守中のもうけは 8 時間で頭打ち', () => {
-  const s = C.newGame(1);
-  const now = Date.now();
-  s.lastSeen = now - 100 * 60 * 60 * 1000;
-  const r = C.offlineReport(s, now);
-  assert.strictEqual(r.cappedMs, C.OFFLINE_CAP_MS);
-  assert.ok(Math.abs(r.money - C.totalRate(s) * (C.OFFLINE_CAP_MS / 1000) * C.OFFLINE_RATE) < 1e-6);
-});
-
-test('留守のもうけは、受け取るまで state を変えない', () => {
-  const s = C.newGame(1);
-  s.lastSeen = Date.now() - 60 * 60 * 1000;
-  const r = C.offlineReport(s);
-  assert.strictEqual(s.money, 0);
-  C.claimOffline(s, r);
-  assert.strictEqual(s.money, r.money);
-});
-
-test('時計は 0:00〜23:59 のあいだをまわる', () => {
-  const s = C.newGame(1);
-  assert.strictEqual(C.gameClock(s).text, '09:00');
-  s.gameMinutes = 1439.9;
-  assert.strictEqual(C.gameClock(s).text, '23:59');
-  s.gameMinutes = 0;
-  assert.strictEqual(C.gameClock(s).text, '00:00');
-  for (let m = 0; m < 1440; m += 7) {
-    s.gameMinutes = m;
-    const c = C.gameClock(s);
-    assert.ok(c.h >= 0 && c.h < 24 && c.m >= 0 && c.m < 60);
-    assert.ok(['morning', 'day', 'evening', 'night'].includes(c.phase));
+test('コースは盤からはみ出さない', () => {
+  for (const st of C.STAGES) {
+    for (const p of st.path) {
+      assert.ok(p[0] - st.corridor >= 0 && p[0] + st.corridor <= C.BOARD.w, `${st.id} が横にはみ出す ${p}`);
+      assert.ok(p[1] - st.corridor >= 0 && p[1] + st.corridor <= C.BOARD.h, `${st.id} が縦にはみ出す ${p}`);
+    }
   }
 });
 
-test('1 日まわしても時計は 24 時をこえない', () => {
-  const s = C.newGame(1);
-  for (let i = 0; i < 2000; i++) C.tick(s, 1000);
-  assert.ok(s.gameMinutes >= 0 && s.gameMinutes < 1440);
-});
-
-// ------------------------------------------------------------ ごほうび
-
-test('工場レベルのごほうびは、何度呼んでも二重に出ない', () => {
-  const s = C.newGame(1);
-  C.claimLevelRewards(s);
-  const paw = s.paw;
-  assert.strictEqual(C.claimLevelRewards(s), 0);
-  assert.strictEqual(s.paw, paw);
-  s.rooms.gohan = 6;
-  assert.strictEqual(C.claimLevelRewards(s), 5);
-  assert.strictEqual(s.paw, paw + 5);
-  assert.strictEqual(C.claimLevelRewards(s), 0);
-});
-
-test('じっせきのごほうびは一度きり', () => {
-  const s = C.newGame(1);
-  s.totalEarned = 1;
-  const first = C.claimAchievements(s);
-  assert.ok(first.some((a) => a.id === 'start'));
-  const paw = s.paw;
-  assert.deepStrictEqual(C.claimAchievements(s), []);
-  assert.strictEqual(s.paw, paw);
-});
-
-test('あわのごほうびは、お金かにくきゅうのどちらか', () => {
-  const s = C.newGame(1);
-  const rng = C.mulberry32(11);
-  let money = 0, paw = 0;
-  for (let i = 0; i < 300; i++) {
-    const r = C.bubbleReward(s, 'gohan', rng);
-    assert.ok(r.amount > 0);
-    if (r.kind === 'paw') paw++; else money++;
+test('離れた区間どうしがくっついていない (近道ができない)', () => {
+  for (const st of C.STAGES) {
+    const segs = C.pathSegments(st.path);
+    const need = st.corridor * 2.05;
+    for (let i = 0; i < segs.length; i++) {
+      for (let j = i + 2; j < segs.length; j++) {
+        const d = C.segSegDist(segs[i][0], segs[i][1], segs[j][0], segs[j][1]);
+        assert.ok(d >= need, `${st.id}: 区間 ${i} と ${j} が近い ${d.toFixed(0)} < ${need.toFixed(0)}`);
+      }
+    }
   }
-  assert.ok(paw > 0 && money > 0, '両方出るはず');
 });
 
-test('タップのごほうびは 1 円を下回らない', () => {
-  const s = C.newGame(1);
-  s.cats = [];
-  s.rooms = {};
-  assert.strictEqual(C.tapReward(s), 1);
-  assert.strictEqual(s.taps, 1);
+test('スタート台とゴール台には、邪魔ものが入ってこない', () => {
+  for (const st of C.STAGES) {
+    assert.ok(C.padsSafe(st), `${st.id}: 台に邪魔ものが入る`);
+  }
+});
+
+test('邪魔ものは曲がり角から離れている', () => {
+  for (const st of C.STAGES) {
+    for (const h of st.hazards) {
+      const gap = C.cornerGap(st, h);
+      assert.ok(gap >= st.corridor + h.bar + C.RING_R,
+        `${st.id}: ${h.type} が角に近い ${gap.toFixed(0)}`);
+    }
+  }
+});
+
+test('置きたい数だけ、ちゃんと置けている', () => {
+  for (const st of C.STAGES) {
+    assert.strictEqual(st.hazards.length, st.specs.length,
+      `${st.id}: ${st.specs.length} 個置きたいのに ${st.hazards.length} 個しか置けていない`);
+  }
+});
+
+// ★ ここが通れることの土台。どの一点も、狙ってくる邪魔ものは多くて 1 つ。
+//   だから「1 つずつ待って抜ける」で必ず前に進める。
+test('邪魔もののふさぐ範囲どうしが、かさならない', () => {
+  for (const st of C.STAGES) {
+    for (let i = 0; i < st.hazards.length; i++) {
+      for (let j = i + 1; j < st.hazards.length; j++) {
+        const a = st.hazards[i].zone, b = st.hazards[j].zone;
+        assert.ok(a.hi < b.lo || b.hi < a.lo,
+          `${st.id}: 邪魔もの ${i} と ${j} が同じ所をふさぐ [${a.lo}-${a.hi}] [${b.lo}-${b.hi}]`);
+      }
+    }
+  }
+});
+
+test('1 つの邪魔ものが、コースを広くふさぎすぎない', () => {
+  for (const st of C.STAGES) {
+    for (const h of st.hazards) {
+      assert.ok(h.zone.hi - h.zone.lo <= 340,
+        `${st.id}: ${h.type} が ${Math.round(h.zone.hi - h.zone.lo)} もふさいでいる`);
+    }
+  }
+});
+
+test('邪魔ものは盤からはみ出さない', () => {
+  for (const st of C.STAGES) {
+    for (const h of st.hazards) {
+      for (let ms = 0; ms < h.period; ms += 40) {
+        const sh = C.hazardShape(h, ms);
+        for (const pt of [[sh.x1, sh.y1], [sh.x2, sh.y2]]) {
+          assert.ok(pt[0] - sh.r >= 0 && pt[0] + sh.r <= C.BOARD.w &&
+                    pt[1] - sh.r >= 0 && pt[1] + sh.r <= C.BOARD.h,
+            `${st.id}: ${h.type} が盤の外 (${Math.round(pt[0])},${Math.round(pt[1])})`);
+        }
+      }
+    }
+  }
+});
+
+test('置いた邪魔ものは、ちゃんとコースに絡んでいる (ただの飾りがない)', () => {
+  for (const st of C.STAGES) {
+    st.hazards.forEach((h, i) => {
+      assert.ok(C.hazardBites(st, h), `${st.id}: 邪魔もの ${i} (${h.type}) がコースに届いていない`);
+    });
+  }
+});
+
+// ★ これが核心。どのステージも、中心線を歩くだけで必ずゴールできる。
+test('すべてのステージは、必ずクリアできる', () => {
+  for (const st of C.STAGES) {
+    const g = C.ghostRun(st);
+    assert.ok(g.cleared, `${st.id} ${st.name}: ${g.reason} (${C.formatTime(g.timeMs)})`);
+    assert.ok(g.timeMs > 1000, `${st.id}: 速すぎる。コースが短すぎないか (${g.timeMs}ms)`);
+  }
+});
+
+test('ステージはだんだん細く、だんだん邪魔ものが増える', () => {
+  for (let i = 1; i < C.STAGES.length; i++) {
+    assert.ok(C.STAGES[i].corridor < C.STAGES[i - 1].corridor, `${C.STAGES[i].id} が細くなっていない`);
+    assert.ok(C.STAGES[i].hazards.length >= C.STAGES[i - 1].hazards.length,
+      `${C.STAGES[i].id} で邪魔ものが減っている`);
+  }
+});
+
+// 通れないコースを、ちゃんと「通れない」と言えるか (見張りそのものの見張り)
+test('通れないコースは、通れないと分かる', () => {
+  const broken = {
+    id: 'x', name: 'こわれ', corridor: 40,
+    path: [[100, 100], [100, 500]],
+    hazards: [{ type: 'pulse', s: 200, x: 100, y: 300, min: 30, max: 40, bar: 0, period: 1000, phase: 0 }]
+  };
+  const g = C.ghostRun(broken);
+  assert.strictEqual(g.cleared, false);
+});
+
+test('スタート台が危ないコースも、はじく', () => {
+  const broken = {
+    id: 'x', name: 'こわれ', corridor: 40,
+    path: [[100, 100], [100, 500]],
+    hazards: [{ type: 'pulse', s: 0, x: 100, y: 100, min: 30, max: 40, bar: 0, period: 1000, phase: 0 }]
+  };
+  const g = C.ghostRun(broken);
+  assert.strictEqual(g.cleared, false);
+  assert.strictEqual(g.reason, 'スタート台が危ない');
 });
 
 // ------------------------------------------------------------ セーブ
 
+test('クリアすると次のステージがひらき、自己ベストが残る', () => {
+  const s = C.newSave();
+  assert.strictEqual(s.unlocked, 1);
+  assert.ok(C.isUnlocked(s, 0));
+  assert.ok(!C.isUnlocked(s, 1));
+
+  const first = C.recordClear(s, C.STAGES[0].id, 9000);
+  assert.strictEqual(first.best, true);
+  assert.strictEqual(s.unlocked, 2);
+  assert.ok(C.isUnlocked(s, 1));
+
+  const slower = C.recordClear(s, C.STAGES[0].id, 12000);
+  assert.strictEqual(slower.best, false);
+  assert.strictEqual(s.best[C.STAGES[0].id], 9000, '遅い記録で上書きしない');
+
+  const faster = C.recordClear(s, C.STAGES[0].id, 7000);
+  assert.strictEqual(faster.best, true);
+  assert.strictEqual(s.best[C.STAGES[0].id], 7000);
+  assert.strictEqual(s.clears, 3);
+});
+
+test('最後のステージをクリアしても、ひらく数は増えすぎない', () => {
+  const s = C.newSave();
+  s.unlocked = C.STAGES.length;
+  C.recordClear(s, C.STAGES[C.STAGES.length - 1].id, 5000);
+  assert.strictEqual(s.unlocked, C.STAGES.length);
+});
+
 test('保存して読み直すと同じ中身になる', () => {
-  const s = C.newGame(7);
-  s.money = 12345.5;
-  s.rooms.kumitate = 4;
+  const s = C.newSave();
+  C.recordClear(s, C.STAGES[0].id, 8123);
+  C.recordClear(s, C.STAGES[1].id, 9456);
+  s.tries = 42;
+  s.muted = true;
   const back = C.deserialize(C.serialize(s));
-  assert.strictEqual(back.money, s.money);
-  assert.strictEqual(back.rooms.kumitate, 4);
-  assert.strictEqual(back.cats.length, s.cats.length);
-  assert.strictEqual(C.factoryLevel(back), C.factoryLevel(s));
+  assert.deepStrictEqual(back.best, s.best);
+  assert.strictEqual(back.unlocked, s.unlocked);
+  assert.strictEqual(back.tries, 42);
+  assert.strictEqual(back.muted, true);
 });
 
 test('セーブが壊れていても、新品として必ず開ける', () => {
-  for (const bad of ['', '{', 'null', '[]', '"x"', '{"cats":5,"rooms":"no"}']) {
-    const s = C.deserialize(bad, 1);
-    assert.ok(C.builtRooms(s).length >= 1, `${bad} で部署がない`);
-    assert.ok(s.cats.length >= 1, `${bad} でねこがいない`);
-    assert.ok(Number.isFinite(C.totalRate(s)));
+  for (const bad of ['', '{', 'null', '[]', '"x"', '{"best":5,"unlocked":"no"}']) {
+    const s = C.deserialize(bad);
+    assert.strictEqual(s.unlocked, 1, `${bad} で開けない`);
+    assert.deepStrictEqual(s.best, {});
   }
+});
+
+test('記録があるステージの次は、必ずひらいている', () => {
+  // unlocked だけ壊れたセーブでも、記録から辻褄を合わせ直す
+  const raw = { best: {}, unlocked: 1 };
+  raw.best[C.STAGES[2].id] = 5000;
+  const s = C.deserialize(JSON.stringify(raw));
+  assert.ok(C.isUnlocked(s, 2), 'クリアしたステージが閉じている');
+  assert.ok(C.isUnlocked(s, 3), 'その次がひらいていない');
 });
 
 test('セーブのおかしな値は取り込まない', () => {
-  const s = C.deserialize(JSON.stringify({
-    money: -999, paw: NaN, cats: [{ id: 'x', level: -3, rarity: 'ZZZ', kind: 'nope', room: 'nowhere' }],
-    rooms: { gohan: 2, ghost: 9 }, gameMinutes: 99999
-  }), 1);
-  assert.ok(s.money >= 0);
-  assert.ok(Number.isFinite(s.paw));
-  assert.strictEqual(s.cats[0].level, 1);
-  assert.strictEqual(s.cats[0].rarity, 'N');
-  assert.strictEqual(s.cats[0].room, null);
-  assert.strictEqual(s.rooms.ghost, undefined);
-  assert.ok(s.gameMinutes >= 0 && s.gameMinutes < 1440);
+  const raw = { best: { s1: -5, s2: 'はやい' }, unlocked: 999, tries: -3 };
+  const s = C.deserialize(JSON.stringify(raw));
+  assert.strictEqual(s.best.s1, undefined);
+  assert.strictEqual(s.best.s2, undefined);
+  assert.strictEqual(s.unlocked, C.STAGES.length);
+  assert.strictEqual(s.tries, 0);
 });
 
-test('席あふれのセーブは、読むときに直る', () => {
-  const def = C.roomDef('gohan');
-  const cats = [];
-  for (let i = 0; i < def.slots + 3; i++) {
-    cats.push({ id: 'c' + i, name: 'x', kind: 'kiji', rarity: 'N', level: 1, room: 'gohan' });
-  }
-  const s = C.deserialize(JSON.stringify({ rooms: { gohan: 1 }, cats: cats }), 1);
-  assert.strictEqual(C.catsIn(s, 'gohan').length, def.slots);
-  assert.strictEqual(s.cats.length, def.slots + 3);
+// ------------------------------------------------------------ 見せ方
+
+test('時間の書き方', () => {
+  assert.strictEqual(C.formatTime(0), '0.00');
+  assert.strictEqual(C.formatTime(1234), '1.23');
+  assert.strictEqual(C.formatTime(59990), '59.99');
+  assert.strictEqual(C.formatTime(61500), '1:01.50');
+  assert.strictEqual(C.formatTime(-1), '--.--');
 });
 
-// ------------------------------------------------------------ 見せ方と間取り
-
-test('数の書き方', () => {
-  assert.strictEqual(C.formatNumber(0), '0');
-  assert.strictEqual(C.formatNumber(999), '999');
-  assert.strictEqual(C.formatNumber(1234), '1,234');
-  assert.strictEqual(C.formatNumber(723355823), '723,355,823');
-  assert.strictEqual(C.formatNumber(1013637280), '1,013,637,280');
-  assert.strictEqual(C.formatNumber(1.5e13), '15兆');
-  assert.strictEqual(C.formatNumber(3e17), '30京');
-  assert.strictEqual(C.formatNumber(Infinity), '∞');
-});
-
-test('留守の長さの書き方', () => {
-  assert.strictEqual(C.formatDuration(5000), '5 秒');
-  assert.strictEqual(C.formatDuration(120000), '2 分');
-  assert.strictEqual(C.formatDuration(3 * 3600 * 1000 + 60000), '3 時間 1 分');
-});
-
-test('持ち場は必ず部屋のなかに収まる', () => {
-  for (const def of C.ROOMS) {
-    const slots = C.slotPositions(def);
-    assert.strictEqual(slots.length, def.slots);
-    for (const s of slots) {
-      assert.ok(s.x > 0 && s.x < def.w, `${def.id} の持ち場が横にはみ出す: ${s.x}`);
-      assert.ok(s.y > 0 && s.y < def.h, `${def.id} の持ち場が縦にはみ出す: ${s.y}`);
-    }
-  }
-});
-
-test('持ち場はベルトをはさんで両側に分かれる', () => {
-  for (const def of C.ROOMS) {
-    const belt = C.beltLine(def);
-    const slots = C.slotPositions(def);
-    const back = slots.filter((s) => s.side === -1);
-    const front = slots.filter((s) => s.side === 1);
-    assert.ok(back.length > 0 && front.length > 0, `${def.id} が片側にかたよっている`);
-    for (const s of back) assert.ok(s.y < belt.y, `${def.id}: 奥がわの持ち場がベルトの手前にある`);
-    for (const s of front) assert.ok(s.y > belt.y, `${def.id}: 手前がわの持ち場がベルトの奥にある`);
-  }
-});
-
-test('ベルトは部屋のなかを通る', () => {
-  for (const def of C.ROOMS) {
-    const belt = C.beltLine(def);
-    assert.ok(belt.x0 > 0 && belt.x1 < def.w, `${def.id} のベルトが横にはみ出す`);
-    assert.ok(belt.x1 - belt.x0 > 0.8, `${def.id} のベルトが短すぎる`);
-    assert.ok(belt.y > 0 && belt.y < def.h, `${def.id} のベルトが縦にはみ出す`);
-  }
-});
-
-test('前の版のセーブは、新しい部署の名前に読みかえる', () => {
-  const s = C.deserialize(JSON.stringify({
-    money: 500,
-    rooms: { kitchen: 5, dev: 2 },
-    cats: [{ id: 'a', name: 'とら', kind: 'kiji', rarity: 'R', level: 3, room: 'dev' }]
-  }));
-  assert.strictEqual(s.rooms.gohan, 5, 'きゅうしょく室 → ごはん工房');
-  assert.strictEqual(s.rooms.keito, 2, 'かいはつ室 → けいと工房');
-  assert.strictEqual(s.cats[0].room, 'keito', 'ねこも引っ越す');
-  assert.strictEqual(s.cats[0].level, 3);
-  assert.strictEqual(s.money, 500);
-});
-
-test('部署どうしは重ならない', () => {
-  for (let i = 0; i < C.ROOMS.length; i++) {
-    for (let j = i + 1; j < C.ROOMS.length; j++) {
-      const a = C.ROOMS[i];
-      const b = C.ROOMS[j];
-      const apart = a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y;
-      assert.ok(apart, `${a.id} と ${b.id} が重なっている`);
-    }
-  }
-});
-
-test('部署は升目からはみ出さない', () => {
-  for (const def of C.ROOMS) {
-    assert.ok(def.x >= 0 && def.x + def.w <= C.GRID.w, `${def.id} が横にはみ出す`);
-    assert.ok(def.y >= 0 && def.y + def.h <= C.GRID.h, `${def.id} が縦にはみ出す`);
-  }
-});
-
-test('アイソメトリックの変換は、原点でも端でも辻褄が合う', () => {
-  assert.deepStrictEqual(C.iso(0, 0, 0), { x: 0, y: 0 });
-  assert.strictEqual(C.iso(1, 0, 0).x, C.TILE.w / 2);
-  assert.strictEqual(C.iso(0, 1, 0).x, -C.TILE.w / 2);
-  assert.strictEqual(C.iso(1, 1, 0).y, C.TILE.h);
-  // 高さは上に上がる (y が小さくなる)
-  assert.ok(C.iso(2, 3, 40).y < C.iso(2, 3, 0).y);
-});
-
-test('画面に収める四角は、升目ぜんたいを含む', () => {
-  const b = C.sceneBounds();
-  assert.ok(b.w > 0 && b.h > 0);
-  for (const def of C.ROOMS) {
-    for (const corner of [[def.x, def.y], [def.x + def.w, def.y + def.h]]) {
-      const p = C.iso(corner[0], corner[1], 0);
-      assert.ok(p.x >= b.x - 1 && p.x <= b.x + b.w + 1, `${def.id} が横にはみ出す`);
-      assert.ok(p.y >= b.y - 1 && p.y <= b.y + b.h + 1, `${def.id} が縦にはみ出す`);
-    }
-  }
-});
-
-test('解放レベルは、部署の順に上がっていく', () => {
-  for (let i = 1; i < C.ROOMS.length; i++) {
-    assert.ok(C.ROOMS[i].unlock > C.ROOMS[i - 1].unlock, `${C.ROOMS[i].id} の解放が早すぎる`);
-  }
-});
-
-test('赤い印は、何かできるときだけ出る', () => {
-  const s = C.newGame(1);
-  s.paw = 0;
-  s.money = 0;
-  s.done = {};
-  for (const a of C.ACHIEVEMENTS) s.done[a.id] = 1;
-  const quiet = C.badges(s);
-  assert.strictEqual(quiet.gacha, false);
-  assert.strictEqual(quiet.awards, false);
-  s.paw = 9999;
-  assert.strictEqual(C.badges(s).gacha, true);
+test('コースの d 属性は、折れ線をそのまま書く', () => {
+  assert.strictEqual(C.pathD([[0, 0], [10, 20]]), 'M0,0 L10,20');
 });

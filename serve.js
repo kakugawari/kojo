@@ -40,5 +40,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`ねこ工場: http://localhost:${PORT}/`);
+  console.log(`ねこイライラ棒: http://localhost:${PORT}/`);
 });

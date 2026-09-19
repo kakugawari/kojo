@@ -22,22 +22,11 @@ let passed = 0;
 let failed = 0;
 
 function ok(condition, message) {
-  if (condition) {
-    passed++;
-    console.log('  \x1b[32m✓\x1b[0m ' + message);
-  } else {
-    failed++;
-    console.log('  \x1b[31m✗ FAIL\x1b[0m ' + message);
-  }
+  if (condition) { passed++; console.log('  \x1b[32m✓\x1b[0m ' + message); }
+  else { failed++; console.log('  \x1b[31m✗ FAIL\x1b[0m ' + message); }
 }
-
-function skip(message) {
-  console.log('  \x1b[90m- とばした: ' + message + '\x1b[0m');
-}
-
-function section(name) {
-  console.log('\n' + name);
-}
+function skip(message) { console.log('  \x1b[90m- とばした: ' + message + '\x1b[0m'); }
+function section(name) { console.log('\n' + name); }
 
 function waitForServer() {
   return new Promise((resolve, reject) => {
@@ -53,68 +42,56 @@ function waitForServer() {
   });
 }
 
-/**
- * 何かした直後に、その要素が本来の場所からどれだけずれるかを
- * 1 フレームずつ測る。「置いた瞬間に一瞬とぶ」たぐいの不具合はこれで見つかる。
- *
- * @returns {Promise<number>} 最大のずれ (px)
- */
-function measureJump(page, selector, act) {
-  return page.evaluate(async ({ sel, code }) => {
-    const before = document.querySelector(sel).getBoundingClientRect();
-    // eslint-disable-next-line no-new-func
-    new Function(code)();
-    let worst = 0;
-    for (let i = 0; i < 12; i++) {
-      await new Promise((r) => requestAnimationFrame(r));
-      const el = document.querySelector(sel);
-      if (!el) { worst = Infinity; break; }
-      const now = el.getBoundingClientRect();
-      worst = Math.max(worst, Math.abs(now.left - before.left), Math.abs(now.top - before.top));
+/** 盤の座標のならびを、押すべき画面の座標に直してもらう。 */
+function courseTrail(page, stageIndex, step) {
+  return page.evaluate(({ i, st }) => {
+    const C = window.Core, stage = C.STAGES[i];
+    const total = C.pathLength(stage.path);
+    const out = [];
+    for (let s = 0; s <= total; s += st) {
+      const p = C.pointAt(stage.path, Math.min(s, total));
+      out.push(window.__app.clientForRing(p.x, p.y));
     }
-    return Math.round(worst);
-  }, { sel: selector, code: act });
+    const g = C.goalPoint(stage);
+    out.push(window.__app.clientForRing(g.x, g.y));
+    return out;
+  }, { i: stageIndex, st: step });
 }
 
-/** 工場を大きくした状態を作る (テストのお膳立て)。
- *  部署は工場レベルで順にひらくので、何周かして建てる。 */
-function grow(page, roomLevels, catCount) {
-  return page.evaluate(({ levels, cats }) => {
-    const a = window.__app, C = a.core, s = a.state();
-    s.money = 1e15;
-    s.paw = 99999;
-    // 部署は工場レベルで順にひらく。ぜんぶ建つまで買い続ける
-    for (let i = 0; i < 300 && C.builtRooms(s).length < C.ROOMS.length; i++) {
-      for (const def of C.ROOMS) C.buyUpgrade(s, def.id);
-    }
-    for (let pass = 0; pass < levels; pass++) for (const def of C.ROOMS) C.buyUpgrade(s, def.id);
-    const rng = C.mulberry32(7);
-    for (let i = 0; i < cats; i++) C.addCat(s, C.newCat(rng));
-    a.buildScene();
-    a.fitCam();   // 育てたあとは工場ぜんたいが見える所から始める
-  }, { levels: roomLevels, cats: catCount });
+/** 中心線ぞいに指を運ぶ。走るのをやめたら、そこで止める。 */
+async function walkTrail(page, trail, holdMs) {
+  for (const p of trail) {
+    await page.mouse.move(p.x, p.y);
+    if (holdMs) await page.waitForTimeout(holdMs);
+    const mode = await page.evaluate(() => window.__app.mode());
+    if (mode !== 'run') return mode;
+  }
+  return page.evaluate(() => window.__app.mode());
 }
 
-/** ゆれ続けている絵はふつうの tap では押せない。真ん中を指でつつく。 */
-async function tapAt(page, selector) {
-  const box = await page.locator(selector).first().boundingBox();
-  if (!box) throw new Error('見つからない: ' + selector);
-  await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+/** 中心線をなぞって、ステージを 1 つ通してみる。 */
+async function autoplay(page, stageIndex, step) {
+  await page.evaluate((i) => window.__app.selectStage(i), stageIndex);
+  await page.waitForTimeout(120);
+  const trail = await courseTrail(page, stageIndex, step || 20);
+  await page.mouse.move(trail[0].x, trail[0].y);
+  await page.mouse.down();
+  for (const p of trail) {
+    await page.mouse.move(p.x, p.y);
+    const mode = await page.evaluate(() => window.__app.mode());
+    if (mode !== 'run') break;
+  }
+  const mode = await page.evaluate(() => window.__app.mode());
+  await page.mouse.up();
+  return mode;
 }
 
 async function run() {
-  let chromium;
-  let devices;
-  try {
-    ({ chromium, devices } = require('playwright'));
-  } catch (e) {
-    console.error('playwright が必要です:  npm i -D playwright');
-    process.exit(1);
-  }
+  let chromium, devices;
+  try { ({ chromium, devices } = require('playwright')); }
+  catch (e) { console.error('playwright が必要です:  npm i -D playwright'); process.exit(1); }
 
-  const server = spawn(process.execPath, [path.join(ROOT, 'serve.js'), String(PORT)], {
-    stdio: 'ignore'
-  });
+  const server = spawn(process.execPath, [path.join(ROOT, 'serve.js'), String(PORT)], { stdio: 'ignore' });
   await waitForServer();
 
   const browser = await chromium.launch(CHROMIUM ? { executablePath: CHROMIUM } : {});
@@ -131,242 +108,218 @@ async function run() {
     await phone.waitForFunction(() => window.__app);
     ok(true, 'ページが開いて、画面のしくみが立ち上がる');
 
-    const fit = await phone.evaluate(() => ({
-      wide: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-      dock: document.getElementById('dock').getBoundingClientRect().bottom,
-      inner: window.innerHeight
-    }));
+    const fit = await phone.evaluate(() => {
+      const b = document.getElementById('board').getBoundingClientRect();
+      return {
+        wide: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        boardW: Math.round(b.width), boardH: Math.round(b.height),
+        innerW: window.innerWidth, innerH: window.innerHeight
+      };
+    });
     ok(fit.wide <= 1, 'スマホ幅で横スクロールが出ない');
-    ok(fit.dock <= fit.inner + 1, `下のバーが画面に収まる (${Math.round(fit.dock)} <= ${fit.inner})`);
+    ok(fit.boardW <= fit.innerW + 1 && fit.boardH <= fit.innerH + 1,
+      `盤が画面に収まる (${fit.boardW}x${fit.boardH} / ${fit.innerW}x${fit.innerH})`);
 
-    // ------------------------------------------------ 工場が描けている
-    section('工場の絵');
-    const scene = await phone.evaluate(() => ({
-      rooms: document.querySelectorAll('#layerRooms [data-room]').length,
-      cats: document.querySelectorAll('#layerRooms [data-cat]').length,
-      signs: document.querySelectorAll('#layerSigns [data-sign]').length,
-      hidden: document.getElementById('modalWrap').getBoundingClientRect().width
-    }));
-    ok(scene.rooms === 6, `部署が 6 つ描かれている (${scene.rooms})`);
-    ok(scene.cats >= 1, `はじめのねこが席についている (${scene.cats} ひき)`);
-    ok(scene.signs === 1, `建っている部署の看板だけ出る (${scene.signs})`);
-    // hidden が display:grid に負けて、灰色の幕が全画面にかかったことがある
-    ok(scene.hidden === 0, 'お知らせの幕は、出していないときは本当に消えている');
-
-    // 部署をぜんぶ建てても絵が壊れないか
-    await grow(phone, 6, 20);
-    const grown = await phone.evaluate(() => ({
-      cats: document.querySelectorAll('#layerRooms [data-cat]').length,
-      signs: document.querySelectorAll('#layerSigns [data-sign]').length,
-      seats: window.__app.core.ROOMS.reduce((a, d) => a + d.slots, 0)
-    }));
-    ok(grown.signs === 6, `建てたぶんだけ看板が増える (${grown.signs})`);
-    ok(grown.cats > 1 && grown.cats <= grown.seats, `ねこが席の数をこえて描かれない (${grown.cats} / 席 ${grown.seats})`);
-
-    // ------------------------------------------------ ねこをなでる
-    section('ねこをなでる');
-    await phone.evaluate(() => window.__app.closeSheet());
-    const before = await phone.evaluate(() => window.__app.state().money);
-    const catPlace = await phone.evaluate(() =>
-      document.querySelector('#layerRooms [data-cat]').getAttribute('transform'));
-    // ねこの絵はすき間だらけなので、からだ (.body) をねらう
-    await tapAt(phone, '#layerRooms [data-cat] .bob .body');
+    // ------------------------------------------------ 絵と判定が同じ数字で出来ているか
+    section('コースの絵');
+    await phone.evaluate(() => window.__app.unlockAll());
+    await phone.evaluate(() => window.__app.selectStage(0));
     await phone.waitForTimeout(150);
-    const petted = await phone.evaluate(() => ({
-      money: window.__app.state().money,
-      taps: window.__app.state().taps,
-      floats: document.querySelectorAll('#layerFx text').length
+    const drawn = await phone.evaluate(() => {
+      const C = window.Core, st = C.STAGES[0];
+      const paths = [...document.querySelectorAll('#course path')];
+      const floor = paths.find((p) => p.getAttribute('stroke') === 'var(--paper)');
+      const circles = [...document.querySelectorAll('#course circle')]
+        .filter((c) => c.getAttribute('fill') === 'var(--paper)');
+      return {
+        floorWidth: Number(floor.getAttribute('stroke-width')),
+        want: st.corridor * 2,
+        padR: circles.map((c) => Number(c.getAttribute('r'))),
+        wantPad: C.padRadius(st)
+      };
+    });
+    // 絵と当たり判定が同じ数字から出ていること。ここがズレると
+    // 「見えているコースの中なのに当たる」が起きる
+    ok(drawn.floorWidth === drawn.want, `床の太さ = コースの太さ (${drawn.floorWidth} / ${drawn.want})`);
+    ok(drawn.padR.length === 2 && drawn.padR.every((r) => r === drawn.wantPad),
+      `台の大きさ = 判定の大きさ (${drawn.padR.join(',')} / ${drawn.wantPad})`);
+
+    // ------------------------------------------------ 通してみる
+    section('コースを通す');
+    await phone.evaluate(() => window.__app.wipe());
+    await phone.reload();
+    await phone.waitForFunction(() => window.__app);
+    const mode1 = await autoplay(phone, 0, 20);
+    ok(mode1 === 'clear', `中心線をなぞればクリアできる (${mode1})`);
+
+    const after = await phone.evaluate(() => ({
+      best: window.__app.save().best[window.Core.STAGES[0].id],
+      unlocked: window.__app.save().unlocked,
+      shown: document.getElementById('best').textContent,
+      panel: document.querySelector('#overlay .panel') ? document.querySelector('#overlay h2').textContent : ''
     }));
-    ok(petted.taps >= 1, `ねこをタップすると なでた回数が増える (${petted.taps})`);
-    ok(petted.money > before, 'なでたぶんお金が入る');
-    ok(petted.floats >= 1, '「+◯◯」が画面に出る');
+    ok(after.best > 0, `タイムが記録される (${Math.round(after.best)}ms)`);
+    ok(after.unlocked === 2, `クリアするとつぎのステージがひらく (${after.unlocked})`);
+    ok(after.panel.includes('ゴール'), `クリア画面が出る (${after.panel})`);
+    ok(after.shown !== '--.--', `自己ベストが上に出る (${after.shown})`);
 
-    // なでた直後に、ねこが本来の場所から飛ばないか。
-    // 置き場所は外側の <g> の transform、ゆれるのは内側の <g>。
-    // 同じ要素でやると、アニメーションが置き場所を上書きして飛ぶ。
-    const catPlaceAfter = await phone.evaluate(() =>
-      document.querySelector('#layerRooms [data-cat]').getAttribute('transform'));
-    ok(catPlace === catPlaceAfter, `なでても、ねこの置き場所そのものは動かない (${catPlaceAfter})`);
-    const jump = await measureJump(phone, '#layerRooms [data-cat]', `
-      const el = document.querySelector('#layerRooms [data-cat] .bob .body');
-      const r = el.getBoundingClientRect();
-      const o = { bubbles: true, pointerId: 9, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 };
-      el.dispatchEvent(new PointerEvent('pointerdown', o));
-      el.dispatchEvent(new PointerEvent('pointerup', o));
-    `);
-    ok(jump < 16, `なでた直後にねこが飛ばない (ゆれと跳ねを入れて最大ずれ ${jump}px)`);
-
-    // ------------------------------------------------ あわ
-    section('あわ');
-    await phone.evaluate(() => { window.__app.closeSheet(); window.__app.spawnBubble(); });
+    // ------------------------------------------------ カベ
+    section('カベ');
+    await phone.evaluate(() => window.__app.unlockAll());
+    await phone.evaluate(() => window.__app.selectStage(0));
     await phone.waitForTimeout(120);
-    const bubbleBox = await phone.evaluate(() => {
-      const b = document.querySelector('#layerFx [data-bubble] rect');
-      const r = b.getBoundingClientRect();
-      return { w: Math.round(r.width), h: Math.round(r.height), x: Math.round(r.left), y: Math.round(r.top) };
+    const wallPts = await phone.evaluate(() => {
+      const C = window.Core, st = C.STAGES[0];
+      const s = C.startPoint(st);
+      const mid = C.pointAt(st.path, 300);
+      // 中心線から真横に、コースの外まで出た所
+      const t = C.tangentAt(st.path, 300);
+      const out = { x: mid.x - t.y * (st.corridor + 40), y: mid.y + t.x * (st.corridor + 40) };
+      return {
+        start: window.__app.clientForRing(s.x, s.y),
+        mid: window.__app.clientForRing(mid.x, mid.y),
+        out: window.__app.clientForRing(out.x, out.y)
+      };
     });
-    // あわをカメラの中に入れていたころ、二重に拡大されて画面いっぱいになった
-    ok(bubbleBox.w > 40 && bubbleBox.w < 260, `あわの大きさがふつう (${bubbleBox.w}x${bubbleBox.h}px)`);
-    ok(bubbleBox.x > -60 && bubbleBox.x < 400, `あわが画面の中にある (x=${bubbleBox.x})`);
+    await phone.mouse.move(wallPts.start.x, wallPts.start.y);
+    await phone.mouse.down();
+    const started = await phone.evaluate(() => window.__app.mode());
+    ok(started === 'run', `START に輪っかをのせると始まる (${started})`);
+    await phone.mouse.move(wallPts.mid.x, wallPts.mid.y);
+    await phone.mouse.move(wallPts.out.x, wallPts.out.y);
+    await phone.waitForTimeout(60);
+    const hitWall = await phone.evaluate(() => ({ mode: window.__app.mode(), kind: window.__app.state().result.kind }));
+    await phone.mouse.up();
+    ok(hitWall.mode === 'fail' && hitWall.kind === 'wall', `カベにさわるとしっぱい (${hitWall.kind})`);
 
-    const beforePop = await phone.evaluate(() => window.__app.state().money + window.__app.state().paw);
-    await tapAt(phone, '#layerFx [data-bubble] rect');
-    await phone.waitForTimeout(150);
-    const popped = await phone.evaluate(() => ({
-      left: document.querySelectorAll('#layerFx [data-bubble]').length,
-      total: window.__app.state().money + window.__app.state().paw
-    }));
-    ok(popped.left === 0, 'タップしたあわは消える');
-    ok(popped.total > beforePop, 'あわのごほうびが入る');
+    // 1 秒たつと、すぐやり直せる状態にもどる
+    await phone.waitForTimeout(1200);
+    ok(await phone.evaluate(() => window.__app.mode()) === 'ready', 'しっぱいのあと、すぐやり直せる');
 
-    // ------------------------------------------------ ベルトコンベア
-    section('ベルトコンベア');
-    const belt = await phone.evaluate(() => {
-      const items = document.querySelectorAll('#layerRooms .flow');
-      const rooms = window.__app.core.ROOMS.filter((d) => d.product).length;
-      return { items: items.length, rooms: rooms, anims: [...items].filter((el) => el.getAnimations().length > 0).length };
+    // ------------------------------------------------ すり抜けよけ (いちばん大事な見張り)
+    section('すり抜け');
+    await phone.evaluate(() => window.__app.selectStage(0));
+    await phone.waitForTimeout(120);
+    const flick = await phone.evaluate(() => {
+      const C = window.Core, st = C.STAGES[0];
+      const s = C.startPoint(st), g = C.goalPoint(st);
+      return { start: window.__app.clientForRing(s.x, s.y), goal: window.__app.clientForRing(g.x, g.y) };
     });
-    ok(belt.items === belt.rooms * 3, `流れているものが部署ぶんある (${belt.items} 個 / ${belt.rooms} 部署)`);
-    ok(belt.anims === belt.items, `ぜんぶ動いている (${belt.anims}/${belt.items})`);
+    await phone.mouse.move(flick.start.x, flick.start.y);
+    await phone.mouse.down();
+    await phone.mouse.move(flick.goal.x, flick.goal.y);   // 一気に払う
+    await phone.waitForTimeout(60);
+    const flicked = await phone.evaluate(() => window.__app.mode());
+    await phone.mouse.up();
+    // 点だけで判定していると、コマとコマのあいだでカベをまたいで通れてしまう
+    ok(flicked === 'fail', `スタートからゴールへ一気に払っても通れない (${flicked})`);
 
-    const moved = await phone.evaluate(() => new Promise((res) => {
-      const el = document.querySelector('#layerRooms .flow');
+    // ------------------------------------------------ 指をはなす
+    section('指をはなす');
+    await phone.waitForTimeout(1100);
+    await phone.evaluate(() => window.__app.selectStage(0));
+    await phone.waitForTimeout(120);
+    const trail0 = await courseTrail(phone, 0, 16);
+    await phone.mouse.move(trail0[0].x, trail0[0].y);
+    await phone.mouse.down();
+    await walkTrail(phone, trail0.slice(0, 12));   // コースぞいに少しだけ進む
+    const running = await phone.evaluate(() => window.__app.mode());
+    await phone.mouse.up();
+    await phone.waitForTimeout(60);
+    const released = await phone.evaluate(() => ({ mode: window.__app.mode(), kind: window.__app.state().result.kind }));
+    ok(running === 'run' && released.mode === 'fail' && released.kind === 'release',
+      `とちゅうで指をはなすとしっぱい (${released.kind})`);
+
+    // ------------------------------------------------ 邪魔もの
+    section('じゃまもの');
+    await phone.waitForTimeout(1100);
+    await phone.evaluate(() => window.__app.selectStage(3));
+    await phone.waitForTimeout(200);
+    const haz = await phone.evaluate(() => new Promise((res) => {
+      const el = document.querySelector('#hazards line.haz-face');
       const a = el.getBoundingClientRect();
       setTimeout(() => {
         const b = el.getBoundingClientRect();
-        res(Math.round(Math.hypot(b.left - a.left, b.top - a.top)));
-      }, 700);
+        res({
+          count: document.querySelectorAll('#hazards line.haz-face').length,
+          want: window.Core.STAGES[3].hazards.length,
+          moved: Math.round(Math.hypot(b.left - a.left, b.top - a.top) + Math.abs(b.width - a.width))
+        });
+      }, 500);
     }));
-    ok(moved > 3, `1 秒たたずにベルトの上を ${moved}px 進む`);
+    ok(haz.count === haz.want, `じゃまものがステージのぶんだけ出ている (${haz.count}/${haz.want})`);
+    ok(haz.moved > 3, `じゃまものが動いている (0.5 秒で ${haz.moved}px)`);
 
-    // 機械が動いているか (プレス・糸車・クレーン・ゲートの光)
-    const machines = await phone.evaluate(() => {
-      const out = {};
-      for (const cls of ['press', 'spin', 'swing', 'blink', 'puff']) {
-        const list = document.querySelectorAll('.' + cls);
-        out[cls] = [...list].filter((el) => el.getAnimations().length > 0).length;
+    // 邪魔ものの所まで行って、そこで止まっていればいつか必ずやられる
+    const into = await phone.evaluate(() => {
+      const C = window.Core, st = C.STAGES[3];
+      const h = st.hazards[0];
+      const out = [];
+      for (let s = 0; s <= h.s; s += 14) {
+        const p = C.pointAt(st.path, s);
+        out.push(window.__app.clientForRing(p.x, p.y));
       }
-      return out;
+      const at = C.pointAt(st.path, h.s);
+      return { trail: out, at: window.__app.clientForRing(at.x, at.y), period: h.period };
     });
-    for (const cls of ['press', 'spin', 'swing', 'blink', 'puff']) {
-      ok(machines[cls] > 0, `${cls} が動いている (${machines[cls]} 個)`);
-    }
-
-    // ------------------------------------------------ 指でなぞる / つまむ
-    section('指でうごかす');
-    await phone.evaluate(() => window.__app.closeSheet());
-    const camBefore = await phone.evaluate(() => ({ ...window.__app.cam }));
-    await phone.mouse.move(200, 400);
+    await phone.mouse.move(into.trail[0].x, into.trail[0].y);
     await phone.mouse.down();
-    for (let i = 1; i <= 6; i++) await phone.mouse.move(200 - i * 12, 400 - i * 6);
+    await walkTrail(phone, into.trail);
+    await phone.mouse.move(into.at.x, into.at.y);
+    // 1 周ぶん待てば棒は必ず通る。しっぱいは 1 秒で ready にもどるので、結果で見る
+    let hitHaz = null;
+    try {
+      await phone.waitForFunction(() => window.__app.state().result !== null,
+        { timeout: into.period + 3000 });
+      hitHaz = await phone.evaluate(() => window.__app.state().result.kind);
+    } catch (e) { hitHaz = 'やられなかった'; }
     await phone.mouse.up();
-    await phone.waitForTimeout(120);
-    const camAfter = await phone.evaluate(() => ({ ...window.__app.cam, sheet: !document.getElementById('sheetWrap').hidden }));
-    ok(Math.abs(camAfter.x - camBefore.x) > 20, `なぞると工場が動く (${Math.round(camBefore.x)} → ${Math.round(camAfter.x)})`);
-    ok(camAfter.sheet === false, 'なぞっただけでは、パネルが開かない');
+    ok(hitHaz === 'hazard', `じゃまものの前で止まっているとやられる (${hitHaz})`);
 
-    // 看板はズームしても大きさが変わらない (画面の座標に置いている)
-    const signSize = await phone.evaluate(() => {
-      const a = window.__app;
-      const el = document.querySelector('#layerSigns [data-sign] rect');
-      const before = el.getBoundingClientRect().width;
-      a.cam.s *= 1.8;
-      document.getElementById('camera').setAttribute('transform',
-        `translate(${a.cam.x} ${a.cam.y}) scale(${a.cam.s})`);
-      a.fitCam();
-      return { before: Math.round(before), after: Math.round(el.getBoundingClientRect().width) };
-    });
-    ok(Math.abs(signSize.after - signSize.before) <= 2,
-      `ズームしても看板の大きさが変わらない (${signSize.before} → ${signSize.after}px)`);
-
-    // ------------------------------------------------ 部署をタップして育てる
-    section('部署を育てる');
-    await phone.evaluate(() => window.__app.closeSheet());
-    await tapAt(phone, '#layerRooms [data-room="gohan"] polygon');
+    // ------------------------------------------------ ステージ一覧
+    section('ステージ一覧');
+    await phone.waitForTimeout(1100);
+    await phone.locator('#btnStages').tap();
     await phone.waitForTimeout(200);
-    const opened = await phone.evaluate(() => ({
+    const sheet = await phone.evaluate(() => ({
       open: !document.getElementById('sheetWrap').hidden,
-      title: document.getElementById('sheetTitle').textContent
+      rows: document.querySelectorAll('#sheetBody .stage-row').length
     }));
-    // 指でタップすると click があとから来る。開いた板の裏に当たって
-    // 一瞬で閉じたことがあるので、開いたままかどうかまで見る
-    ok(opened.open && opened.title.includes('ごはん工房'),
-      `部署をタップすると中身が出て、開いたままになる (${opened.title} / ${opened.open ? '開' : '閉'})`);
-
-    const lvBefore = await phone.evaluate(() => window.__app.core.roomLevel(window.__app.state(), 'gohan'));
-    await phone.locator('#sheetBody [data-buy="gohan"]').tap();
+    ok(sheet.open && sheet.rows === 6, `ステージが 6 つならぶ (${sheet.rows})`);
+    await phone.locator('#sheetBody [data-stage="2"]').tap();
     await phone.waitForTimeout(200);
-    const lvAfter = await phone.evaluate(() => ({
-      level: window.__app.core.roomLevel(window.__app.state(), 'gohan'),
-      sign: document.querySelector('#layerSigns [data-sign="gohan"] text').textContent
+    const picked = await phone.evaluate(() => ({
+      closed: document.getElementById('sheetWrap').hidden,
+      name: document.getElementById('stageName').textContent
     }));
-    ok(lvAfter.level === lvBefore + 1, `ボタンを押すとレベルが上がる (${lvBefore} → ${lvAfter.level})`);
-    ok(lvAfter.sign.includes('Lv.' + lvAfter.level), `看板の表示も一緒に変わる (${lvAfter.sign.trim()})`);
+    ok(picked.closed && picked.name.startsWith('3.'), `えらんだステージに切りかわる (${picked.name})`);
 
-    // ------------------------------------------------ ガチャ
-    section('ガチャ');
-    await phone.evaluate(() => window.__app.openSheet('gacha'));
-    await phone.waitForTimeout(150);
-    const catsBefore = await phone.evaluate(() => window.__app.state().cats.length);
-    await phone.locator('#sheetBody [data-gacha="10"]').tap();
-    await phone.waitForTimeout(300);
-    const gacha = await phone.evaluate(() => ({
-      cats: window.__app.state().cats.length,
-      shown: document.querySelectorAll('#gachaResult .cat-card').length
-    }));
-    ok(gacha.cats === catsBefore + 10, `10 連でねこが 10 ぴき増える (${catsBefore} → ${gacha.cats})`);
-    ok(gacha.shown === 10, `引いた 10 ぴきが並ぶ (${gacha.shown})`);
-    // 板は 0.6 秒ごとに描き直される。結果がそこで消えないか
-    await phone.waitForTimeout(1200);
-    const stillThere = await phone.evaluate(() => document.querySelectorAll('#gachaResult .cat-card').length);
-    ok(stillThere === 10, `少し待っても結果が消えない (${stillThere})`);
-
-    // ------------------------------------------------ 時間帯
-    section('朝と夜');
-    await phone.evaluate(() => { window.__app.closeSheet(); window.__app.state().gameMinutes = 21 * 60; });
-    await phone.waitForTimeout(2000);
-    const night = await phone.evaluate(() => ({
-      phase: document.getElementById('app').dataset.phase,
-      tint: getComputedStyle(document.getElementById('tint')).fill,
-      clock: document.getElementById('clock').textContent
-    }));
-    ok(night.phase === 'night', `21 時なら夜になる (${night.phase} / ${night.clock})`);
-    ok(night.tint !== 'rgba(0, 0, 0, 0)' && night.tint !== 'none', `夜は画面に色がかかる (${night.tint})`);
-
-    // ------------------------------------------------ 保存
+    // ------------------------------------------------ 続きから
     section('続きから');
-    await phone.evaluate(() => { window.__app.state().money = 1234567; window.__app.save(true); });
     await phone.reload();
     await phone.waitForFunction(() => window.__app);
     const reloaded = await phone.evaluate(() => ({
-      money: window.__app.state().money,
-      cats: window.__app.state().cats.length,
-      gohan: window.__app.core.roomLevel(window.__app.state(), 'gohan')
+      best: window.__app.save().best[window.Core.STAGES[0].id],
+      unlocked: window.__app.save().unlocked
     }));
-    ok(reloaded.money >= 1234567, `お金が続きから始まる (${Math.round(reloaded.money)})`);
-    ok(reloaded.cats > 10 && reloaded.gohan > 1, `ねこと部署も残っている (ねこ ${reloaded.cats} / ごはん工房 Lv.${reloaded.gohan})`);
+    ok(reloaded.best > 0 && reloaded.unlocked >= 2,
+      `記録と、ひらいたステージが残る (ベスト ${Math.round(reloaded.best)}ms / ${reloaded.unlocked} ステージ)`);
 
-    // セーブが壊れていても開けるか
-    await phone.evaluate(() => localStorage.setItem(window.__app.core.SAVE_KEY, '{こわれ'));
+    await phone.evaluate(() => localStorage.setItem(window.Core.SAVE_KEY, '{こわれ'));
     await phone.reload();
     await phone.waitForFunction(() => window.__app);
-    ok(await phone.evaluate(() => window.__app.state().cats.length >= 1),
+    ok(await phone.evaluate(() => window.__app.save().unlocked === 1),
       'セーブが壊れていても、新品として開ける');
 
     // ------------------------------------------------ 遅い端末
     section('遅い端末');
+    await phone.evaluate(() => { window.__app.unlockAll(); window.__app.selectStage(5); });
     const cdp = await context.newCDPSession(phone);
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
-    await grow(phone, 8, 25);
     await phone.waitForTimeout(400);
     const frames = await phone.evaluate(() => new Promise((res) => {
-      const gaps = [];
-      let last = performance.now();
-      let n = 0;
-      const step = (t) => {
-        gaps.push(t - last); last = t;
-        if (++n < 80) requestAnimationFrame(step); else res(gaps.slice(12));
-      };
+      const gaps = []; let last = performance.now(); let n = 0;
+      const step = (t) => { gaps.push(t - last); last = t; if (++n < 80) requestAnimationFrame(step); else res(gaps.slice(12)); };
       requestAnimationFrame(step);
     }));
     frames.sort((a, b) => a - b);
@@ -396,28 +349,15 @@ async function run() {
     await desk.goto(URL);
     const apple = await desk.evaluate(() =>
       document.querySelector('link[rel="apple-touch-icon"]')?.getAttribute('href'));
-    if (!apple) {
-      skip('ホーム画面用のアイコンはまだ無い');
-    } else {
-      // iOS は SVG のアイコンを使えない
-      ok(apple.endsWith('.png'), `ホーム画面用アイコンが PNG (${apple})`);
+    if (!apple) skip('ホーム画面用のアイコンはまだ無い');
+    else {
+      ok(apple.endsWith('.png'), `ホーム画面用アイコンが PNG (${apple})`);  // iOS は SVG を使えない
       const res = await desk.request.get(URL + apple.replace('./', ''));
       ok(res.ok(), `${apple} が配信される`);
     }
 
-    // ------------------------------------------------ 更新とオフライン (sw.js があれば)
     section('更新とオフライン');
-    if (!fs.existsSync(path.join(ROOT, 'sw.js'))) {
-      skip('サービスワーカーはまだ無い (オフライン対応するときに用意する)');
-    } else {
-      const swCtx = await browser.newContext();
-      const swPage = await swCtx.newPage();
-      await swPage.goto(URL);
-      await swPage.waitForFunction(() => window.__app);
-      ok(await swPage.evaluate(() => navigator.serviceWorker.ready.then((r) => !!r.active).catch(() => false)),
-        'サービスワーカーが動く');
-      await swCtx.close();
-    }
+    if (!fs.existsSync(path.join(ROOT, 'sw.js'))) skip('サービスワーカーはまだ無い (オフライン対応するときに用意する)');
 
     section('エラー');
     ok(errors.length === 0, errors.length ? '画面のエラー: ' + errors.join(' / ') : 'JS エラーなし');
@@ -430,7 +370,4 @@ async function run() {
   process.exit(failed ? 1 : 0);
 }
 
-run().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+run().catch((err) => { console.error(err); process.exit(1); });
