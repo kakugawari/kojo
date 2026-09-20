@@ -35,6 +35,12 @@
   /** 「もう少しで壁」の合図を出す余裕。 */
   const NEAR = 13;
 
+  /**
+   * 暗室検査のとき、手もとが見える明かりの半径。
+   * いちばん太いみぞ (58) の 2 倍以上ないと、足もとの溝すら見えなくなる。
+   */
+  const LIGHT_R = 150;
+
   /** 1 つの邪魔ものがふさいでよい長さの上限。
    *  これをこえるものは、コースの別の場所まで巻きこんでいるので置かない。 */
   const MAX_ZONE = 340;
@@ -589,7 +595,8 @@
       unlocked: 1,     // ひらいているステージ数
       tries: 0,
       clears: 0,
-      muted: false
+      muted: false,
+      dark: false      // 暗室検査 (手もとだけ明るい)
     };
   }
 
@@ -640,6 +647,7 @@
       if (Number.isFinite(raw[key]) && raw[key] >= 0) s[key] = Math.floor(raw[key]);
     }
     s.muted = !!raw.muted;
+    s.dark = !!raw.dark;
     return s;
   }
 
@@ -672,6 +680,7 @@
     RING_R: RING_R,
     STICK: STICK,
     NEAR: NEAR,
+    LIGHT_R: LIGHT_R,
     STAGES: STAGES,
 
     clamp: clamp,

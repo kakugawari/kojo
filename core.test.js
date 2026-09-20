@@ -288,6 +288,22 @@ test('最後のステージをクリアしても、ひらく数は増えすぎ�
   assert.strictEqual(s.unlocked, C.STAGES.length);
 });
 
+test('明かりは、いちばん太いみぞより広く照らす', () => {
+  const widest = Math.max(...C.STAGES.map((st) => st.corridor));
+  assert.ok(C.LIGHT_R > widest * 2,
+    `暗室検査で足もとのみぞが見えない (明かり ${C.LIGHT_R} / みぞ ${widest})`);
+});
+
+test('暗室検査の入り切りはおぼえている', () => {
+  const s = C.newSave();
+  assert.strictEqual(s.dark, false, 'はじめは明るい');
+  s.dark = true;
+  assert.strictEqual(C.deserialize(C.serialize(s)).dark, true);
+  assert.strictEqual(C.deserialize('{"dark":"はい"}').dark, true);   // 何が入っていても true/false に
+  assert.strictEqual(C.deserialize('{"dark":0}').dark, false);
+  assert.strictEqual(C.deserialize('こわれ').dark, false);
+});
+
 test('保存して読み直すと同じ中身になる', () => {
   const s = C.newSave();
   C.recordClear(s, C.STAGES[0].id, 8123);

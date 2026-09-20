@@ -163,7 +163,52 @@ async function run() {
     ok(after.panel.includes('出荷'), `合格の画面が出る (${after.panel})`);
     ok(after.shown !== '--.--', `自己ベストが上に出る (${after.shown})`);
 
-    // ------------------------------------------------ カベ
+    // ------------------------------------------------ 暗室検査
+    section('暗室検査');
+    await phone.evaluate(() => window.__app.selectStage(0));
+    await phone.waitForTimeout(120);
+    const lightOff = await phone.evaluate(() => document.getElementById('dark').getAttribute('display'));
+    await phone.locator('#btnDark').tap();
+    await phone.waitForTimeout(150);
+    const lightOn = await phone.evaluate(() => ({
+      display: document.getElementById('dark').getAttribute('display'),
+      pressed: document.getElementById('btnDark').getAttribute('aria-pressed'),
+      saved: window.__app.save().dark
+    }));
+    ok(lightOff === 'none' && lightOn.display === 'inline' && lightOn.pressed === 'true',
+      `🔦 で幕が出る (${lightOff} → ${lightOn.display})`);
+    ok(lightOn.saved === true, '入り切りをおぼえている');
+
+    // 明かりはリングについてくる
+    const follow = await phone.evaluate(() => {
+      const hole = document.getElementById('lightHole');
+      const r = window.__app.ring();
+      return { cx: Number(hole.getAttribute('cx')), cy: Number(hole.getAttribute('cy')), rx: r.x, ry: r.y };
+    });
+    ok(Math.abs(follow.cx - follow.rx) < 1 && Math.abs(follow.cy - follow.ry) < 1,
+      `明かりがリングの上にある (${follow.cx},${follow.cy})`);
+
+    // 幕は操作をさえぎらない。暗くてもコースの形も判定も同じなので、なぞれば通る
+    const darkRun = await autoplay(phone, 0, 20);
+    ok(darkRun === 'clear', `暗室でも、なぞれば合格できる (${darkRun})`);
+    const movedLight = await phone.evaluate(() => ({
+      cx: Number(document.getElementById('lightHole').getAttribute('cx')),
+      cy: Number(document.getElementById('lightHole').getAttribute('cy'))
+    }));
+    ok(Math.abs(movedLight.cx - follow.cx) > 20 || Math.abs(movedLight.cy - follow.cy) > 20,
+      `明かりが動いた (${follow.cx},${follow.cy} → ${movedLight.cx},${movedLight.cy})`);
+    ok(await phone.evaluate(() => document.getElementById('dark').getAttribute('display')) === 'none',
+      '合格したあいだは幕を上げる');
+
+    await phone.locator('#btnDark').tap();
+    await phone.waitForTimeout(120);
+    const lightBack = await phone.evaluate(() => ({
+      saved: window.__app.save().dark,
+      display: document.getElementById('dark').getAttribute('display')
+    }));
+    ok(lightBack.saved === false && lightBack.display === 'none', '💡 でもとにもどる');
+
+    // ------------------------------------------------ 外わく
     section('外わく');
     await phone.evaluate(() => window.__app.unlockAll());
     await phone.evaluate(() => window.__app.selectStage(0));
@@ -211,7 +256,7 @@ async function run() {
     await phone.waitForTimeout(60);
     const flicked = await phone.evaluate(() => window.__app.mode());
     await phone.mouse.up();
-    // 点だけで判定していると、コマとコマのあいだでカベをまたいで通れてしまう
+    // 点だけで判定していると、コマとコマのあいだで外わくをまたいで通れてしまう
     ok(flicked === 'fail', `スタートからゴールへ一気に払っても通れない (${flicked})`);
 
     // ------------------------------------------------ 指をはなす

@@ -21,7 +21,8 @@
     grip: $('grip'), ring: $('ring'), fx: $('fx'),
     stageName: $('stageName'), time: $('time'), best: $('best'),
     progressBar: $('progressBar'), overlay: $('overlay'),
-    btnStages: $('btnStages'), btnSound: $('btnSound'),
+    dark: $('dark'), lightHole: $('lightHole'),
+    btnStages: $('btnStages'), btnDark: $('btnDark'), btnSound: $('btnSound'),
     sheetWrap: $('sheetWrap'), sheetBack: $('sheetBack'), sheetBody: $('sheetBody'),
     sheetClose: $('sheetClose')
   };
@@ -234,6 +235,23 @@
         : '');
   }
 
+  /** 暗室検査の明かりを、リングのまわりに持ってくる。 */
+  function drawLight() {
+    if (!save.dark) return;
+    els.lightHole.setAttribute('cx', game.ring.x.toFixed(1));
+    els.lightHole.setAttribute('cy', game.ring.y.toFixed(1));
+  }
+
+  /** 幕を出すかどうか。合格したときだけは、ぜんぶ見せる。 */
+  function applyDark() {
+    const on = save.dark && game.mode !== 'clear';
+    els.dark.setAttribute('display', on ? 'inline' : 'none');
+    els.btnDark.textContent = save.dark ? '💡' : '🔦';
+    els.btnDark.setAttribute('aria-pressed', String(!!save.dark));
+    els.btnDark.setAttribute('aria-label', save.dark ? 'ぜんたいを見る' : '手もとだけ照らす');
+    if (on) drawLight();
+  }
+
   function drawPlayer() {
     const r = game.ring, g = game.grip;
     const line = (el, ax, ay, bx, by) => {
@@ -246,6 +264,7 @@
     line(els.handle, g.x, g.y, g.x + (r.x - g.x) * 0.34, g.y + (r.y - g.y) * 0.34);
     els.ring.setAttribute('transform', 'translate(' + r.x.toFixed(1) + ' ' + r.y.toFixed(1) + ')');
     els.grip.setAttribute('transform', 'translate(' + g.x.toFixed(1) + ' ' + g.y.toFixed(1) + ')');
+    drawLight();
   }
 
   function buildPlayerParts() {
@@ -318,6 +337,7 @@
     game.mode = mode;
     game.modeAt = performance.now();
     els.app.dataset.mode = mode;
+    applyDark();
     renderOverlay();
   }
 
@@ -617,6 +637,7 @@
 
     buildPanel();
     buildPlayerParts();
+    applyDark();
     // 記録がいちばん進んでいる所から始める
     selectStage(Math.min(save.unlocked - 1, C.STAGES.length - 1));
 
@@ -638,6 +659,12 @@
       if (!row || row.disabled) return;
       closeSheet();
       selectStage(Number(row.dataset.stage));
+    });
+    els.btnDark.addEventListener('click', () => {
+      save.dark = !save.dark;
+      persist();
+      applyDark();
+      hint(save.dark ? '🔦 暗室検査 — 手もとしか見えない' : '💡 明かりをつけた');
     });
     els.btnSound.addEventListener('click', () => {
       save.muted = !save.muted;
