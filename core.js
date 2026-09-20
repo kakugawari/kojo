@@ -45,6 +45,8 @@
   /** 1 つの邪魔ものがふさいでよい長さの上限。
    *  ここをこえると、コースの半分近くを 1 つで占めてしまう。 */
   const MAX_ZONE = 520;
+  // 可動部の置き場所の候補を、直線の上にこの間隔でならべる
+  const WINDOW_STEP = 22;
 
   const TAU = Math.PI * 2;
 
@@ -76,24 +78,29 @@
       id: 's2', model: 'IRB-02', name: '量産 A 型', corridor: 48, neon: '#7c6bff',
       path: [[90, 300], [260, 300], [260, 100], [480, 100], [480, 300], [700, 300], [700, 100], [960, 100]],
       hazards: [
-        { type: 'slide', side: 1, period: 2000, phase: 0 }
+        { type: 'rotor', side: -1, period: 2000, phase: 0.05 },
+        { type: 'slide', side: -1, period: 2200, phase: 0 }
       ]
     },
     {
       id: 's3', model: 'IRB-03', name: 'うずまき型', corridor: 44, neon: '#ff5ce0',
       path: [[90, 200], [220, 200], [220, 90], [420, 90], [420, 310], [620, 310], [620, 90], [820, 90], [820, 200], [970, 200]],
       hazards: [
-        { type: 'rotor', side: -1, period: 2600, phase: 0 },
-        { type: 'pulse', side: 1, period: 1900, phase: .3 }
+        { type: 'slide', side: -1, period: 2600, phase: 0.75 },
+        { type: 'slide', side: 1, period: 2300, phase: 0.3 },
+        { type: 'pulse', side: -1, period: 2600, phase: 0.15 },
+        { type: 'rotor', side: 1, period: 1900, phase: 0.05 }
       ]
     },
     {
       id: 's4', model: 'IRB-04', name: 'ジグザグ型', corridor: 40, neon: '#4dff9e',
       path: [[80, 100], [310, 100], [310, 310], [540, 310], [540, 100], [770, 100], [770, 310], [980, 310]],
       hazards: [
-        { type: 'slide', side: 1, period: 1700, phase: 0 },
-        { type: 'rotor', side: -1, period: 2300, phase: .5 },
-        { type: 'pulse', side: 1, period: 1600, phase: .15 }
+        { type: 'rotor', side: -1, period: 2000, phase: 0.15 },
+        { type: 'slide', side: 1, period: 2300, phase: 0.65 },
+        { type: 'slide', side: -1, period: 2300, phase: 0.05 },
+        { type: 'pulse', side: 1, period: 2000, phase: 0.5 },
+        { type: 'rotor', side: 1, period: 2300, phase: 0.5 }
       ]
     },
     {
@@ -101,10 +108,13 @@
       path: [[70, 310], [70, 100], [250, 100], [250, 310], [430, 310], [430, 100], [610, 100], [610, 310],
              [790, 310], [790, 100], [970, 100]],
       hazards: [
-        { type: 'rotor', side: 1, period: 2100, phase: 0 },
-        { type: 'slide', side: -1, period: 1500, phase: .25 },
-        { type: 'pulse', side: 1, period: 1500, phase: .5 },
-        { type: 'slide', side: -1, period: 1800, phase: .6 }
+        { type: 'slide', side: -1, period: 2100, phase: 0.6 },
+        { type: 'slide', side: 1, period: 1700, phase: 0.6 },
+        { type: 'slide', side: 1, period: 1500, phase: 0.95 },
+        { type: 'rotor', side: -1, period: 2100, phase: 0.65 },
+        { type: 'rotor', side: -1, period: 1500, phase: 0.05 },
+        { type: 'pulse', side: -1, period: 1500, phase: 0.15 },
+        { type: 'slide', side: -1, period: 2100, phase: 0.55 }
       ]
     },
     {
@@ -112,11 +122,15 @@
       path: [[70, 90], [70, 310], [240, 310], [240, 90], [410, 90], [410, 310], [580, 310], [580, 90],
              [750, 90], [750, 310], [920, 310], [920, 90], [990, 90]],
       hazards: [
-        { type: 'slide', side: 1, period: 1400, phase: 0 },
-        { type: 'rotor', side: -1, period: 1900, phase: .3 },
-        { type: 'pulse', side: 1, period: 1300, phase: .5 },
-        { type: 'rotor', side: 1, period: 2200, phase: .1 },
-        { type: 'slide', side: -1, period: 1600, phase: .7 }
+        { type: 'slide', side: 1, period: 1300, phase: 0.75 },
+        { type: 'pulse', side: -1, period: 1700, phase: 0.45 },
+        { type: 'slide', side: -1, period: 1500, phase: 0.65 },
+        { type: 'slide', side: -1, period: 1900, phase: 0.35 },
+        { type: 'slide', side: -1, period: 1700, phase: 0.25 },
+        { type: 'rotor', side: 1, period: 1700, phase: 0.9 },
+        { type: 'rotor', side: 1, period: 1900, phase: 0.4 },
+        { type: 'slide', side: -1, period: 2200, phase: 0.9 },
+        { type: 'slide', side: 1, period: 1300, phase: 0.65 }
       ]
     }
   ];
@@ -340,7 +354,13 @@
       const lo = Math.max(seg.start + clear, endClear);
       const hi = Math.min(seg.start + seg.len - clear, total - endClear);
       if (hi < lo) continue;
-      out.push((lo + hi) / 2);
+      // 長い直線には 1 つだけでなく、WINDOW_STEP ごとに候補をならべる。
+      // 多めに出しておいて、実際に置けるかどうか (ふさぐ範囲がかさならないか) は
+      // buildStages が決める。候補が密なほど、同じ直線に 2 つ並べられる
+      const n = Math.max(1, Math.floor((hi - lo) / WINDOW_STEP) + 1);
+      if (n === 1) { out.push((lo + hi) / 2); continue; }
+      const mid = (lo + hi) / 2, span = (n - 1) * WINDOW_STEP;
+      for (let k = 0; k < n; k++) out.push(mid - span / 2 + k * WINDOW_STEP);
     }
     return out;
   }
@@ -440,58 +460,76 @@
     return lo < 0 ? null : { lo: lo, hi: hi, runs: runs };
   }
 
-  function buildStages() {
-    for (const st of STAGES) {
+  function buildStages(only) {
+    for (const st of (only || STAGES)) {
       const specs = st.specs || st.hazards;
       st.specs = specs;
       const win = stageWindows(st);
       st.windows = win.list;
-      st.hazards = [];
-
-      const taken = {};
-      const zones = [];
       const m = win.list.length;
 
-      let minIdx = 0;
-      for (let i = 0; i < specs.length; i++) {
-        const spec = specs[i];
-        // 置きたいのは「端から端まで均等」な位置。そこから近い順にためす。
-        // 前の邪魔ものより手前には戻さない (コースの順番を保つ)
-        const want = m === 0 ? 0
-          : (specs.length === 1 ? Math.floor(m / 2) : Math.round(i * (m - 1) / (specs.length - 1)));
-        const order = [];
-        for (let k = minIdx; k < m; k++) order.push(k);
-        order.sort((a2, b2) => Math.abs(a2 - want) - Math.abs(b2 - want) || a2 - b2);
-
-        let placed = null;
-        let placedIdx = -1;
-        for (const k of order) {
-          if (taken[k]) continue;
-          // 左右どちらに出すかは、巻きこむ範囲がせまいほうを選ぶ
-          let bestH = null;
+      // 1. それぞれの仕様を、どの候補地に・どちら向きで置けるか、先に全部組み立てる。
+      //    ここで落とすのは「置いた時点で成り立たない」ものだけ
+      const cand = specs.map((spec, i) => {
+        const list = [];
+        for (let k = 0; k < m; k++) {
           for (const sd of [spec.side || 1, -(spec.side || 1)]) {
             const h = buildHazard(st, { type: spec.type, side: sd, period: spec.period, phase: spec.phase, bar: spec.bar, len: spec.len, dir: spec.dir }, win.list[k]);
-            if (!hazardFits(h)) continue;         // 盤からはみ出す置き方はしない
+            if (!hazardFits(h)) continue;             // 盤からはみ出す置き方はしない
             if (!hazardClearsPads(st, h)) continue;   // 端子に届く置き方もしない
             const z = blockedRange(st, h);
-            if (!z) continue;                     // コースに絡まないなら置く意味がない
-            // 飛び地になっている = となりの通路まで届いている
-            if (z.runs > 1) continue;
-            if (z.hi - z.lo > MAX_ZONE) continue;
-            // ★ ふさぐ範囲が他とかぶらないこと。
-            //   どの一点も、同時に 2 つからは狙われない → 1 つずつ待てば必ず抜けられる
-            let clash = false;
-            for (const u of zones) {
-              if (z.lo <= u.hi + 24 && u.lo <= z.hi + 24) { clash = true; break; }
-            }
-            if (clash) continue;
+            if (!z) continue;                         // コースに絡まないなら置く意味がない
+            if (z.runs > 1) continue;                 // 飛び地 = となりの通路まで届いている
+            if (z.hi - z.lo > MAX_ZONE) continue;     // ふさぎすぎ
             h.zone = z;
-            if (!bestH || (z.hi - z.lo) < (bestH.zone.hi - bestH.zone.lo)) bestH = h;
+            list.push({ k: k, h: h });
           }
-          if (bestH) { taken[k] = 1; zones.push(bestH.zone); placed = bestH; placedIdx = k; break; }
         }
-        if (placed) { st.hazards.push(placed); minIdx = placedIdx + 1; }
+        // 「端から端まで均等」に近い候補から順にためす。同じ候補地なら、ふさぐ範囲がせまいほう
+        const want = m === 0 ? 0
+          : (specs.length === 1 ? Math.floor(m / 2) : Math.round(i * (m - 1) / (specs.length - 1)));
+        list.sort((a, b) => Math.abs(a.k - want) - Math.abs(b.k - want) ||
+                            (a.h.zone.hi - a.h.zone.lo) - (b.h.zone.hi - b.h.zone.lo) || a.k - b.k);
+        return list;
+      });
+
+      // 2. 組み合わせを後戻りありで探す。
+      //    前から順に貪欲に取ると、先に置いたものが後のものの置き場所をつぶし、
+      //    「本当は全部置けるのに置けない」が起きる。後戻りすれば、
+      //    置ける並べ方があるかぎり必ず見つかる
+      const zones = [], chosen = [];
+      let budget = 400000;
+      function free(z) {
+        // ★ ふさぐ範囲が他とかぶらないこと。
+        //   どの一点も、同時に 2 つからは狙われない → 1 つずつ待てば必ず抜けられる
+        for (const u of zones) if (z.lo <= u.hi + 24 && u.lo <= z.hi + 24) return false;
+        return true;
       }
+      function place(i, minIdx) {
+        if (i === specs.length) return true;
+        for (const c of cand[i]) {
+          if (c.k < minIdx) continue;         // コースの順番を保つ (前へは戻さない)
+          if (budget-- < 0) return false;
+          if (!free(c.h.zone)) continue;
+          zones.push(c.h.zone); chosen.push(c.h);
+          if (place(i + 1, c.k + 1)) return true;
+          zones.pop(); chosen.pop();
+        }
+        return false;
+      }
+      if (!place(0, 0)) {
+        // 全部は置けなかった。置けるぶんだけ前から詰める
+        // (この状態は npm test が落として知らせる)
+        zones.length = 0; chosen.length = 0;
+        let minIdx = 0;
+        for (let i = 0; i < specs.length; i++) {
+          for (const c of cand[i]) {
+            if (c.k < minIdx || !free(c.h.zone)) continue;
+            zones.push(c.h.zone); chosen.push(c.h); minIdx = c.k + 1; break;
+          }
+        }
+      }
+      st.hazards = chosen.slice();
     }
   }
 
@@ -739,6 +777,7 @@
     pointAt: pointAt,
     tangentAt: tangentAt,
     buildHazard: buildHazard,
+    buildStages: buildStages,
     hazardWindows: hazardWindows,
     stageWindows: stageWindows,
     blockedRange: blockedRange,

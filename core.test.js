@@ -74,7 +74,8 @@ test('スタート台とゴール台の判定', () => {
 // ------------------------------------------------------------ 邪魔もの
 
 test('往復する棒は、両はしまでちゃんと行き来する', () => {
-  const h = C.STAGES[1].hazards[0];
+  // 何番目が往復する棒かは、置き場所しだいで変わる。型で探す
+  const h = C.STAGES.map((st) => st.hazards.find((x) => x.type === 'slide')).find(Boolean);
   let nearA = Infinity, nearB = Infinity;
   for (let ms = 0; ms < h.period; ms += 10) {
     const s = C.hazardShape(h, ms);
@@ -162,6 +163,44 @@ test('置きたい数だけ、ちゃんと置けている', () => {
     assert.strictEqual(st.hazards.length, st.specs.length,
       `${st.id}: ${st.specs.length} 個置きたいのに ${st.hazards.length} 個しか置けていない`);
   }
+});
+
+// 前から貪欲に取ると「本当は全部置けるのに置けない」が起きる。
+// buildStages は後戻りして探すので、置ける並べ方があるかぎり必ず見つかる。
+// (この見張りがないと、可動部を 1 つ足しただけで黙って 1 つ減る)
+test('前から貪欲に取ると詰む品番でも、後戻りして全部置けている', () => {
+  let harder = 0;
+  for (const st of C.STAGES) {
+    if (!st.specs.length) continue;
+    // 同じ候補地から、後戻りなしで前から詰めたらいくつ置けるか
+    const win = C.stageWindows(st).list;
+    const zones = [];
+    let minIdx = 0, n = 0;
+    for (let i = 0; i < st.specs.length; i++) {
+      const spec = st.specs[i];
+      const want = st.specs.length === 1 ? Math.floor(win.length / 2)
+        : Math.round(i * (win.length - 1) / (st.specs.length - 1));
+      const order = [];
+      for (let k = minIdx; k < win.length; k++) order.push(k);
+      order.sort((a, b) => Math.abs(a - want) - Math.abs(b - want) || a - b);
+      let got = null;
+      for (const k of order) {
+        for (const sd of [spec.side || 1, -(spec.side || 1)]) {
+          const h = C.buildHazard(st, { type: spec.type, side: sd, period: spec.period, phase: spec.phase }, win[k]);
+          if (!C.hazardFits(h) || !C.hazardClearsPads(st, h)) continue;
+          const z = C.blockedRange(st, h);
+          if (!z || z.runs > 1) continue;
+          if (zones.some((u) => z.lo <= u.hi + 24 && u.lo <= z.hi + 24)) continue;
+          if (!got || (z.hi - z.lo) < (got.z.hi - got.z.lo)) got = { z: z, k: k };
+        }
+        if (got) break;
+      }
+      if (got) { zones.push(got.z); minIdx = got.k + 1; n++; }
+    }
+    assert.ok(st.hazards.length >= n, `${st.id}: 後戻りしたほうが少ない`);
+    if (st.hazards.length > n) harder++;
+  }
+  assert.ok(harder > 0, '後戻りが効いている品番が 1 つもない (試す意味がなくなっている)');
 });
 
 // ★ ここが通れることの土台。どの一点も、狙ってくる邪魔ものは多くて 1 つ。
@@ -255,6 +294,17 @@ test('ステージはだんだん細く、だんだん邪魔ものが増える',
     assert.ok(C.STAGES[i].corridor < C.STAGES[i - 1].corridor, `${C.STAGES[i].id} が細くなっていない`);
     assert.ok(C.STAGES[i].hazards.length >= C.STAGES[i - 1].hazards.length,
       `${C.STAGES[i].id} で邪魔ものが減っている`);
+  }
+});
+
+// 「動く棒」= 往復する棒 (slide) と回る腕 (rotor)。ふくらむ玉は棒ではない。
+// 最初の品番 (IRB-01) だけは、通しかたを覚えるための何もないラインにしてある
+test('IRB-01 以外はどれも動く棒があり、あとの品番ほど多い', () => {
+  const bars = C.STAGES.map((st) => st.hazards.filter((h) => h.type !== 'pulse').length);
+  assert.strictEqual(bars[0], 0, 'IRB-01 は何もないライン');
+  for (let i = 1; i < bars.length; i++) {
+    assert.ok(bars[i] >= 1, `${C.STAGES[i].id} に動く棒がない`);
+    assert.ok(bars[i] >= bars[i - 1], `${C.STAGES[i].id} で動く棒が減っている`);
   }
 });
 
