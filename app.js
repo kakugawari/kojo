@@ -9,9 +9,14 @@
 
   const C = window.Core;
 
-  /** 見える範囲。盤の下に、指を置くための帯を足しておく。
-   *  そうしないと、コースの下のほうで「棒の持ち手が画面の外」になる。 */
-  const VIEW = { w: C.BOARD.w, h: C.BOARD.h + C.STICK };
+  /**
+   * 見える範囲。盤の上下に帯を足す。
+   *   上 (HUD_BAND) … 上のバーが置かれる場所。コースにかぶらないように空ける
+   *   下 (GRIP_BAND) … 指を置く場所。ないとコースの下のほうで持ち手が画面の外に出る
+   */
+  const HUD_BAND = 70;
+  const GRIP_BAND = C.STICK + 8;
+  const VIEW = { x: 0, y: -HUD_BAND, w: C.BOARD.w, h: HUD_BAND + C.BOARD.h + GRIP_BAND };
 
   const $ = (id) => document.getElementById(id);
   const els = {
@@ -21,7 +26,7 @@
     grip: $('grip'), ring: $('ring'), fx: $('fx'),
     stageName: $('stageName'), time: $('time'), best: $('best'),
     progressBar: $('progressBar'), overlay: $('overlay'),
-    dark: $('dark'), lightHole: $('lightHole'),
+    bg: $('bg'), dark: $('dark'), darkAll: $('darkAll'), lightHole: $('lightHole'),
     btnStages: $('btnStages'), btnDark: $('btnDark'), btnSound: $('btnSound'),
     sheetWrap: $('sheetWrap'), sheetBack: $('sheetBack'), sheetBody: $('sheetBody'),
     sheetClose: $('sheetClose')
@@ -117,31 +122,43 @@
 
   // ------------------------------------------------------------ コースを描く
 
+  const VOID = '#06070d';   // みぞの中と、外の空間。おなじ色でいい (管のふちで分かる)
+
   function drawCourse() {
     const st = game.stage;
     const d = C.pathD(st.path);
     const pad = C.padRadius(st);
     const sp = C.startPoint(st), gp = C.goalPoint(st);
+    const neon = st.neon;
 
-    /* 光・カベ・床 の 3 枚を重ねる。
-       描く形は判定とまったく同じ「中心線 + 2 つの台」なので、
-       見えているコースの中にいれば必ず安全、という関係がくずれない。 */
-    const layer = (color, grow) =>
+    /*
+     * ネオン管。中心線を太らせた 1 本を、太さを変えて何枚も重ねるだけ。
+     *   外から: ぼんやり光 → 光 → 管の芯 → まんなかを VOID でくりぬく
+     * いちばん内側のくりぬきが ちょうど みぞ半径×2 なので、
+     * 見えている暗いすき間が、そのまま通れる範囲になる。
+     */
+    const layer = (color, grow, op) =>
       '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="' + (st.corridor * 2 + grow) +
-      '" stroke-linecap="round" stroke-linejoin="round"/>' +
-      '<circle cx="' + sp.x + '" cy="' + sp.y + '" r="' + (pad + grow / 2) + '" fill="' + color + '"/>' +
-      '<circle cx="' + gp.x + '" cy="' + gp.y + '" r="' + (pad + grow / 2) + '" fill="' + color + '"/>';
+      '" stroke-linecap="round" stroke-linejoin="round"' + (op === undefined ? '' : ' opacity="' + op + '"') + '/>' +
+      '<circle cx="' + sp.x + '" cy="' + sp.y + '" r="' + (pad + grow / 2) + '" fill="' + color + '"' +
+      (op === undefined ? '' : ' opacity="' + op + '"') + '/>' +
+      '<circle cx="' + gp.x + '" cy="' + gp.y + '" r="' + (pad + grow / 2) + '" fill="' + color + '"' +
+      (op === undefined ? '' : ' opacity="' + op + '"') + '/>';
 
     els.course.innerHTML =
-      layer('var(--wall-dim)', 26) +
-      layer('var(--wall)', 12) +
-      layer('var(--paper)', 0) +
+      layer(neon, 58, .07) +
+      layer(neon, 34, .14) +
+      layer(neon, 18, .3) +
+      layer(neon, 9) +
+      layer(VOID, 0) +
       '<path class="dash" d="' + d + '"/>' +
-      // 端子。検査はここから入って、ここへ抜ける
-      '<g><circle cx="' + sp.x + '" cy="' + sp.y + '" r="' + (pad - 10) + '" fill="none" stroke="var(--start)" stroke-width="5" stroke-dasharray="14 9"/>' +
-      '<text x="' + sp.x + '" y="' + (sp.y + 6) + '" text-anchor="middle" font-size="18" fill="#177a41">START</text></g>' +
-      '<g><circle cx="' + gp.x + '" cy="' + gp.y + '" r="' + (pad - 10) + '" fill="none" stroke="#c98b00" stroke-width="5" stroke-dasharray="14 9"/>' +
-      '<text x="' + gp.x + '" y="' + (gp.y + 6) + '" text-anchor="middle" font-size="18" fill="#8a5c00">GOAL</text></g>';
+      // 端子
+      '<g><circle cx="' + sp.x + '" cy="' + sp.y + '" r="' + (pad - 12) + '" fill="none" stroke="var(--start)" ' +
+      'stroke-width="3.5" stroke-dasharray="12 9" opacity=".8"/>' +
+      '<text x="' + sp.x + '" y="' + (sp.y + 6) + '" text-anchor="middle" font-size="17" fill="var(--start)" opacity=".9">START</text></g>' +
+      '<g><circle cx="' + gp.x + '" cy="' + gp.y + '" r="' + (pad - 12) + '" fill="none" stroke="var(--goal)" ' +
+      'stroke-width="3.5" stroke-dasharray="12 9" opacity=".8"/>' +
+      '<text x="' + gp.x + '" y="' + (gp.y + 6) + '" text-anchor="middle" font-size="17" fill="var(--goal)" opacity=".9">GOAL</text></g>';
   }
 
   // ------------------------------------------------------------ 邪魔ものを描く
@@ -156,12 +173,12 @@
       if (h.type === 'slide') {
         g.appendChild(svgEl('line', {
           x1: h.ax, y1: h.ay, x2: h.bx, y2: h.by,
-          stroke: 'rgba(255,210,63,.32)', 'stroke-width': 4, 'stroke-dasharray': '8 8', 'stroke-linecap': 'round'
+          stroke: 'rgba(255,210,63,.22)', 'stroke-width': 3, 'stroke-dasharray': '7 8', 'stroke-linecap': 'round'
         }));
       } else if (h.type === 'rotor') {
         g.appendChild(svgEl('circle', {
           cx: h.x, cy: h.y, r: h.arm, fill: 'none',
-          stroke: 'rgba(255,210,63,.24)', 'stroke-width': 3, 'stroke-dasharray': '10 10'
+          stroke: 'rgba(255,210,63,.16)', 'stroke-width': 2.5, 'stroke-dasharray': '9 10'
         }));
       } else {
         // 玉が出てくる筒。どこから来るのかが分かるように、外がわへ伸ばす
@@ -169,27 +186,24 @@
         const len = Math.hypot(h.x - anchor.x, h.y - anchor.y) || 1;
         const ux = (h.x - anchor.x) / len, uy = (h.y - anchor.y) / len;
         g.appendChild(svgEl('line', {
-          x1: h.x, y1: h.y, x2: h.x + ux * 46, y2: h.y + uy * 46,
-          stroke: '#1a1f2b', 'stroke-width': h.max * 1.5, 'stroke-linecap': 'round'
+          x1: h.x, y1: h.y, x2: h.x + ux * 40, y2: h.y + uy * 40,
+          stroke: VOID, 'stroke-width': h.max * 1.5, 'stroke-linecap': 'round'
         }));
         g.appendChild(svgEl('line', {
-          x1: h.x, y1: h.y, x2: h.x + ux * 44, y2: h.y + uy * 44,
-          stroke: '#59647c', 'stroke-width': h.max * 1.5 - 8, 'stroke-linecap': 'round'
-        }));
-        g.appendChild(svgEl('circle', {
-          cx: h.x, cy: h.y, r: h.max, fill: 'none',
-          stroke: 'rgba(255,210,63,.24)', 'stroke-width': 3, 'stroke-dasharray': '10 10'
+          x1: h.x, y1: h.y, x2: h.x + ux * 38, y2: h.y + uy * 38,
+          stroke: '#3c4560', 'stroke-width': h.max * 1.5 - 8, 'stroke-linecap': 'round'
         }));
       }
+      const glow = svgEl('line', { class: 'haz-glow' });
       const back = svgEl('line', { class: 'haz-back' });
       const face = svgEl('line', { class: 'haz-face' });
-      g.appendChild(back); g.appendChild(face);
+      g.appendChild(glow); g.appendChild(back); g.appendChild(face);
       if (h.type === 'rotor') {
-        g.appendChild(svgEl('circle', { cx: h.x, cy: h.y, r: h.bar + 7, fill: '#1a1428' }));
-        g.appendChild(svgEl('circle', { cx: h.x, cy: h.y, r: h.bar + 2, fill: '#6b5f86' }));
+        g.appendChild(svgEl('circle', { cx: h.x, cy: h.y, r: h.bar + 6, fill: VOID }));
+        g.appendChild(svgEl('circle', { cx: h.x, cy: h.y, r: h.bar + 2, fill: '#ffd23f', opacity: '.85' }));
       }
       els.hazards.appendChild(g);
-      return { back: back, face: face, h: h };
+      return { glow: glow, back: back, face: face, h: h };
     });
   }
 
@@ -197,11 +211,12 @@
     for (const e of hazEls) {
       const s = C.hazardShape(e.h, ms);
       const x1 = s.x1.toFixed(1), y1 = s.y1.toFixed(1), x2 = s.x2.toFixed(1), y2 = s.y2.toFixed(1);
-      e.back.setAttribute('x1', x1); e.back.setAttribute('y1', y1);
-      e.back.setAttribute('x2', x2); e.back.setAttribute('y2', y2);
-      e.back.setAttribute('stroke-width', (s.r * 2 + 9).toFixed(1));
-      e.face.setAttribute('x1', x1); e.face.setAttribute('y1', y1);
-      e.face.setAttribute('x2', x2); e.face.setAttribute('y2', y2);
+      for (const part of [e.glow, e.back, e.face]) {
+        part.setAttribute('x1', x1); part.setAttribute('y1', y1);
+        part.setAttribute('x2', x2); part.setAttribute('y2', y2);
+      }
+      e.glow.setAttribute('stroke-width', (s.r * 2 + 22).toFixed(1));
+      e.back.setAttribute('stroke-width', (s.r * 2 + 8).toFixed(1));
       e.face.setAttribute('stroke-width', (s.r * 2).toFixed(1));
     }
   }
@@ -227,11 +242,12 @@
     const R = C.RING_R;
     els.ring.innerHTML =
       // 外径がちょうど RING_R になるように、線の太さのぶんだけ内側に描く
+      '<circle r="' + (R - 4) + '" fill="none" stroke="' + col + '" stroke-width="16" opacity=".16"/>' +
       '<circle r="' + (R - 4) + '" fill="none" stroke="#11141c" stroke-width="9"/>' +
       '<circle r="' + (R - 4) + '" fill="none" stroke="' + col + '" stroke-width="5.4"/>' +
-      '<circle r="' + (R - 5.6) + '" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="1.2"/>' +
+      '<circle r="' + (R - 5.6) + '" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>' +
       (mood === 'near' || mood === 'fail'
-        ? '<circle r="' + (R + 7) + '" fill="none" stroke="' + col + '" stroke-width="2.4" opacity=".55"/>'
+        ? '<circle r="' + (R + 8) + '" fill="none" stroke="' + col + '" stroke-width="2.4" opacity=".6"/>'
         : '');
   }
 
@@ -275,22 +291,31 @@
     setMood('normal');
   }
 
-  /** 検査台のプレート。工場で作っている「ユニット」が乗っている板。 */
+  /** 決まった並びの乱数。星の位置を毎回おなじにするためだけに使う。 */
+  function seeded(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /** 背景。まっ暗な空間に、こまかい星を散らす。 */
   function buildPanel() {
-    const W = C.BOARD.w, H = C.BOARD.h;
-    const rivet = (x, y) =>
-      '<circle cx="' + x + '" cy="' + y + '" r="7" fill="#161a24"/>' +
-      '<circle cx="' + x + '" cy="' + (y - 1) + '" r="4.6" fill="#5e6a82"/>' +
-      '<circle cx="' + x + '" cy="' + (y - 2) + '" r="2" fill="#8d99b2"/>';
-    els.panel.innerHTML =
-      '<rect x="4" y="4" width="' + (W - 8) + '" height="' + (H - 8) + '" rx="26" fill="#2d364d" stroke="#5a6883" stroke-width="4"/>' +
-      '<rect x="4" y="4" width="' + (W - 8) + '" height="' + (H - 8) + '" rx="26" fill="url(#dots)"/>' +
-      '<rect x="14" y="14" width="' + (W - 28) + '" height="' + (H - 28) + '" rx="18" fill="none" stroke="rgba(255,255,255,.07)" stroke-width="3"/>' +
-      // 左右のふちに注意帯 (上ぶちは上のバーにかくれるので、横に入れる)
-      '<rect x="10" y="46" width="11" height="' + (H - 92) + '" rx="5.5" fill="url(#stripes)" opacity=".8"/>' +
-      '<rect x="' + (W - 21) + '" y="46" width="11" height="' + (H - 92) + '" rx="5.5" fill="url(#stripes)" opacity=".8"/>' +
-      rivet(32, 34) + rivet(W - 32, 34) + rivet(32, H / 2) + rivet(W - 32, H / 2) +
-      rivet(32, H - 26) + rivet(W - 32, H - 26);
+    const rng = seeded(20260920);
+    let stars = '';
+    for (let i = 0; i < 90; i++) {
+      const x = VIEW.x + rng() * VIEW.w;
+      const y = VIEW.y + rng() * VIEW.h;
+      const r = (0.7 + rng() * 1.6).toFixed(2);
+      const o = (0.18 + rng() * 0.55).toFixed(2);
+      stars += '<circle cx="' + x.toFixed(0) + '" cy="' + y.toFixed(0) + '" r="' + r +
+        '" fill="#ffffff" opacity="' + o + '"/>';
+    }
+    els.panel.innerHTML = stars;
   }
 
   // ------------------------------------------------------------ 進行
@@ -427,7 +452,7 @@
   }
 
   function flash() {
-    const r = svgEl('rect', { x: 0, y: 0, width: VIEW.w, height: VIEW.h, fill: 'var(--wall)' });
+    const r = svgEl('rect', { x: VIEW.x, y: VIEW.y, width: VIEW.w, height: VIEW.h, fill: 'var(--wall)' });
     els.fx.appendChild(r);
     const a = r.animate([{ opacity: .45 }, { opacity: 0 }], { duration: reduceMotion ? 1 : 420 });
     a.onfinish = () => r.remove();
@@ -627,13 +652,18 @@
   function main() {
     save = load();
 
-    els.board.setAttribute('viewBox', '0 0 ' + VIEW.w + ' ' + VIEW.h);
+    els.board.setAttribute('viewBox', VIEW.x + ' ' + VIEW.y + ' ' + VIEW.w + ' ' + VIEW.h);
     els.board.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    // 背景と暗幕は、上下の帯もふくめて見える範囲ぜんぶを覆う
+    for (const r of [els.bg, els.dark, els.darkAll]) {
+      r.setAttribute('x', VIEW.x); r.setAttribute('y', VIEW.y);
+      r.setAttribute('width', VIEW.w); r.setAttribute('height', VIEW.h);
+    }
     els.gripZone.innerHTML =
-      '<line x1="24" y1="' + C.BOARD.h + '" x2="' + (VIEW.w - 24) + '" y2="' + C.BOARD.h +
-      '" stroke="rgba(255,255,255,.1)" stroke-width="3" stroke-dasharray="12 12"/>' +
-      '<text x="' + (VIEW.w / 2) + '" y="' + (C.BOARD.h + 58) + '" text-anchor="middle" font-size="22" ' +
-      'fill="rgba(255,255,255,.2)">— 作業台（ここをにぎる）—</text>';
+      '<line x1="40" y1="' + (C.BOARD.h + 10) + '" x2="' + (VIEW.w - 40) + '" y2="' + (C.BOARD.h + 10) +
+      '" stroke="rgba(255,255,255,.09)" stroke-width="2.5" stroke-dasharray="10 12"/>' +
+      '<text x="' + (VIEW.w / 2) + '" y="' + (C.BOARD.h + 48) + '" text-anchor="middle" font-size="19" ' +
+      'fill="rgba(255,255,255,.18)">— ここをにぎる —</text>';
 
     buildPanel();
     buildPlayerParts();
@@ -660,7 +690,10 @@
       closeSheet();
       selectStage(Number(row.dataset.stage));
     });
-    els.btnDark.addEventListener('click', () => {
+    $('btnStay').addEventListener('click', () => {
+      document.getElementById('rotate').classList.add('dismissed');
+    });
+        els.btnDark.addEventListener('click', () => {
       save.dark = !save.dark;
       persist();
       applyDark();

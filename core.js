@@ -23,14 +23,15 @@
   const SAVE_VERSION = 1;
 
   /** 盤面の広さ。画面の大きさが変わっても、ここは変わらない。
-   *  遊びやすさ (コースの細さ・棒の長さ) が端末でブレないようにするため。 */
-  const BOARD = { w: 640, h: 960 };
+   *  遊びやすさ (みぞの細さ・棒の長さ) が端末でブレないようにするため。
+   *  横向き (ランドスケープ) の画面に合わせた比率。 */
+  const BOARD = { w: 1060, h: 400 };
 
   /** 輪っかの半径。当たり判定はこの円ちょうど。絵もこの円で描く。 */
   const RING_R = 22;
 
   /** 指から輪っかまでの棒の長さ。指で輪っかが隠れないように持ち上げる。 */
-  const STICK = 96;
+  const STICK = 72;
 
   /** 「もう少しで壁」の合図を出す余裕。 */
   const NEAR = 13;
@@ -39,11 +40,11 @@
    * 暗室検査のとき、手もとが見える明かりの半径。
    * いちばん太いみぞ (58) の 2 倍以上ないと、足もとの溝すら見えなくなる。
    */
-  const LIGHT_R = 150;
+  const LIGHT_R = 165;
 
   /** 1 つの邪魔ものがふさいでよい長さの上限。
-   *  これをこえるものは、コースの別の場所まで巻きこんでいるので置かない。 */
-  const MAX_ZONE = 340;
+   *  ここをこえると、コースの半分近くを 1 つで占めてしまう。 */
+  const MAX_ZONE = 520;
 
   const TAU = Math.PI * 2;
 
@@ -67,28 +68,28 @@
    */
   const STAGES = [
     {
-      id: 's1', model: 'IRB-01', name: '試作ゼロ号', corridor: 58,
-      path: [[110, 130], [110, 330], [325, 330], [325, 545], [530, 545], [530, 790], [300, 790], [300, 860]],
+      id: 's1', model: 'IRB-01', name: '試作ゼロ号', corridor: 52, neon: '#4de3ff',
+      path: [[90, 110], [300, 110], [300, 300], [620, 300], [620, 110], [960, 110]],
       hazards: []
     },
     {
-      id: 's2', model: 'IRB-02', name: '量産 A 型', corridor: 50,
-      path: [[105, 120], [105, 340], [300, 420], [300, 620], [520, 620], [520, 280], [430, 200], [430, 110]],
+      id: 's2', model: 'IRB-02', name: '量産 A 型', corridor: 48, neon: '#7c6bff',
+      path: [[90, 300], [260, 300], [260, 100], [480, 100], [480, 300], [700, 300], [700, 100], [960, 100]],
       hazards: [
         { type: 'slide', side: 1, period: 2000, phase: 0 }
       ]
     },
     {
-      id: 's3', model: 'IRB-03', name: 'うずまき型', corridor: 46,
-      path: [[100, 120], [100, 360], [280, 360], [280, 140], [455, 140], [455, 420], [300, 560], [300, 800], [545, 800], [545, 620]],
+      id: 's3', model: 'IRB-03', name: 'うずまき型', corridor: 44, neon: '#ff5ce0',
+      path: [[90, 200], [220, 200], [220, 90], [420, 90], [420, 310], [620, 310], [620, 90], [820, 90], [820, 200], [970, 200]],
       hazards: [
-        { type: 'rotor', side: 1, period: 2600, phase: 0 },
-        { type: 'pulse', side: -1, period: 1900, phase: .3 }
+        { type: 'rotor', side: -1, period: 2600, phase: 0 },
+        { type: 'pulse', side: 1, period: 1900, phase: .3 }
       ]
     },
     {
-      id: 's4', model: 'IRB-04', name: 'ジグザグ型', corridor: 42,
-      path: [[95, 110], [95, 300], [235, 400], [95, 500], [95, 700], [300, 780], [500, 700], [500, 420], [560, 330], [560, 120]],
+      id: 's4', model: 'IRB-04', name: 'ジグザグ型', corridor: 40, neon: '#4dff9e',
+      path: [[80, 100], [310, 100], [310, 310], [540, 310], [540, 100], [770, 100], [770, 310], [980, 310]],
       hazards: [
         { type: 'slide', side: 1, period: 1700, phase: 0 },
         { type: 'rotor', side: -1, period: 2300, phase: .5 },
@@ -96,23 +97,26 @@
       ]
     },
     {
-      id: 's5', model: 'IRB-05', name: 'ロング型', corridor: 40,
-      path: [[90, 110], [90, 340], [255, 340], [255, 130], [420, 130], [420, 360], [255, 480], [255, 700], [90, 700], [90, 870], [400, 870], [555, 760], [555, 230]],
+      id: 's5', model: 'IRB-05', name: 'ロング型', corridor: 36, neon: '#ffa83d',
+      path: [[70, 310], [70, 100], [250, 100], [250, 310], [430, 310], [430, 100], [610, 100], [610, 310],
+             [790, 310], [790, 100], [970, 100]],
       hazards: [
         { type: 'rotor', side: 1, period: 2100, phase: 0 },
-        { type: 'slide', side: 1, period: 1500, phase: .25 },
-        { type: 'pulse', side: -1, period: 1500, phase: .5 },
+        { type: 'slide', side: -1, period: 1500, phase: .25 },
+        { type: 'pulse', side: 1, period: 1500, phase: .5 },
         { type: 'slide', side: -1, period: 1800, phase: .6 }
       ]
     },
     {
-      id: 's6', model: 'IRB-06', name: '鬼仕様', corridor: 36,
-      path: [[85, 110], [85, 290], [215, 380], [85, 470], [85, 660], [230, 745], [230, 880], [430, 880], [430, 650], [300, 560], [430, 470], [430, 250], [548, 170], [548, 100]],
+      id: 's6', model: 'IRB-06', name: '鬼仕様', corridor: 32, neon: '#ff3d5f',
+      path: [[70, 90], [70, 310], [240, 310], [240, 90], [410, 90], [410, 310], [580, 310], [580, 90],
+             [750, 90], [750, 310], [920, 310], [920, 90], [990, 90]],
       hazards: [
         { type: 'slide', side: 1, period: 1400, phase: 0 },
-        { type: 'pulse', side: -1, period: 1300, phase: .35 },
-        { type: 'rotor', side: 1, period: 1900, phase: .5 },
-        { type: 'slide', side: -1, period: 1600, phase: .15 }
+        { type: 'rotor', side: -1, period: 1900, phase: .3 },
+        { type: 'pulse', side: 1, period: 1300, phase: .5 },
+        { type: 'rotor', side: 1, period: 2200, phase: .1 },
+        { type: 'slide', side: -1, period: 1600, phase: .7 }
       ]
     }
   ];
@@ -279,11 +283,18 @@
       };
     }
     if (spec.type === 'rotor') {
-      // 支点はコースの外。中心線までの余裕が R + 12 あるので、支点は当たらない
-      const dist = R + bar + RING_R + 12;
+      /*
+       * 支点はみぞのすぐ外がわ (壁ぎわ) に置く。
+       * - 支点そのものは、中心線から 10 以上の余裕を残す位置にする
+       *   (ここが近すぎると、腕がどこを向いていても当たってしまう)
+       * - 腕は R の 1.1 倍。みぞを横切るぶんだけで、となりの通路までは届かない
+       * 支点を遠くに置いて長い腕を回すと、折り返したコースでは
+       * となりの通路まで巻きこんでしまい、どこにも置けなくなる。
+       */
+      const dist = Math.max(R + 6, bar + RING_R + 10);
       return {
         type: 'rotor', s: s, x: p.x + nx * dist, y: p.y + ny * dist,
-        arm: Math.round(dist + R * 0.7), bar: bar, period: period, phase: phase, dir: spec.dir || 1
+        arm: Math.round(dist + R * 1.1), bar: bar, period: period, phase: phase, dir: spec.dir || 1
       };
     }
 
@@ -375,6 +386,22 @@
     return true;
   }
 
+  /** この邪魔もの 1 つが、START / GOAL 端子に届いてしまわないか。 */
+  function hazardClearsPads(stage, h) {
+    const pads = [
+      { x: stage.path[0][0], y: stage.path[0][1] },
+      { x: stage.path[stage.path.length - 1][0], y: stage.path[stage.path.length - 1][1] }
+    ];
+    const reach = padRadius(stage) + RING_R;
+    for (let ms = 0; ms < h.period; ms += 25) {
+      const sh = hazardShape(h, ms);
+      for (const pad of pads) {
+        if (segDist(pad.x, pad.y, sh.x1, sh.y1, sh.x2, sh.y2).d - sh.r < reach) return false;
+      }
+    }
+    return true;
+  }
+
   /**
    * 置いた邪魔ものが「いつか」中心線をふさぐ範囲 (進んだ長さで [lo, hi])。
    * この範囲が他の邪魔ものとかぶらなければ、どの一点も狙ってくるのは 1 つだけになる。
@@ -382,18 +409,35 @@
   function blockedRange(stage, h) {
     const total = pathLength(stage.path);
     const r = RING_R + 6;
-    let lo = Infinity, hi = -Infinity;
+    const step = 12;
+    const n = Math.floor(total / step) + 1;
+    const hit = new Uint8Array(n);
+    const pts = [];
+    for (let i = 0; i < n; i++) pts.push(pointAt(stage.path, i * step));
+
     for (let ms = 0; ms < h.period; ms += 40) {
       const sh = hazardShape(h, ms);
-      for (let s = 0; s <= total; s += 12) {
-        const p = pointAt(stage.path, s);
-        if (segDist(p.x, p.y, sh.x1, sh.y1, sh.x2, sh.y2).d - sh.r - r < 0) {
-          if (s < lo) lo = s;
-          if (s > hi) hi = s;
-        }
+      for (let i = 0; i < n; i++) {
+        if (hit[i]) continue;
+        if (segDist(pts[i].x, pts[i].y, sh.x1, sh.y1, sh.x2, sh.y2).d - sh.r - r < 0) hit[i] = 1;
       }
     }
-    return lo <= hi ? { lo: lo, hi: hi } : null;
+
+    // ひとつながりか、飛び地になっているかを数える。
+    // 飛び地 = となりの通路まで届いている = そこには置けない
+    let lo = -1, hi = -1, runs = 0, gap = 0, inRun = false;
+    for (let i = 0; i < n; i++) {
+      if (hit[i]) {
+        if (!inRun) { runs++; inRun = true; }
+        if (lo < 0) lo = i * step;
+        hi = i * step;
+        gap = 0;
+      } else if (inRun) {
+        gap += step;
+        if (gap > 36) inRun = false;      // このくらい空いたら、別の場所とみなす
+      }
+    }
+    return lo < 0 ? null : { lo: lo, hi: hi, runs: runs };
   }
 
   function buildStages() {
@@ -428,9 +472,11 @@
           for (const sd of [spec.side || 1, -(spec.side || 1)]) {
             const h = buildHazard(st, { type: spec.type, side: sd, period: spec.period, phase: spec.phase, bar: spec.bar, len: spec.len, dir: spec.dir }, win.list[k]);
             if (!hazardFits(h)) continue;         // 盤からはみ出す置き方はしない
+            if (!hazardClearsPads(st, h)) continue;   // 端子に届く置き方もしない
             const z = blockedRange(st, h);
             if (!z) continue;                     // コースに絡まないなら置く意味がない
-            // ふさぐ範囲が広すぎる = コースの別の場所まで巻きこんでいる
+            // 飛び地になっている = となりの通路まで届いている
+            if (z.runs > 1) continue;
             if (z.hi - z.lo > MAX_ZONE) continue;
             // ★ ふさぐ範囲が他とかぶらないこと。
             //   どの一点も、同時に 2 つからは狙われない → 1 つずつ待てば必ず抜けられる
@@ -697,6 +743,7 @@
     stageWindows: stageWindows,
     blockedRange: blockedRange,
     hazardFits: hazardFits,
+    hazardClearsPads: hazardClearsPads,
     cornerGap: cornerGap,
 
     hazardShape: hazardShape,

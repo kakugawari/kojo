@@ -180,9 +180,21 @@ test('邪魔もののふさぐ範囲どうしが、かさならない', () => {
 
 test('1 つの邪魔ものが、コースを広くふさぎすぎない', () => {
   for (const st of C.STAGES) {
+    const total = C.pathLength(st.path);
     for (const h of st.hazards) {
-      assert.ok(h.zone.hi - h.zone.lo <= 340,
-        `${st.id}: ${h.type} が ${Math.round(h.zone.hi - h.zone.lo)} もふさいでいる`);
+      const w = h.zone.hi - h.zone.lo;
+      assert.ok(w <= 520, `${st.id}: ${h.type} が ${Math.round(w)} もふさいでいる`);
+      assert.ok(w < total * 0.45, `${st.id}: ${h.type} がコースの半分近くを占めている`);
+    }
+  }
+});
+
+// ★ 飛び地 = となりの通路まで届いている。そこで待っても、もう一方がふさぐ
+test('邪魔もののふさぐ範囲は、ひとつながりになっている', () => {
+  for (const st of C.STAGES) {
+    for (const h of st.hazards) {
+      assert.strictEqual(h.zone.runs, 1,
+        `${st.id}: ${h.type} が ${h.zone.runs} か所に分かれてふさいでいる`);
     }
   }
 });
@@ -216,6 +228,16 @@ test('すべてのステージは、必ずクリアできる', () => {
     const g = C.ghostRun(st);
     assert.ok(g.cleared, `${st.id} ${st.name}: ${g.reason} (${C.formatTime(g.timeMs)})`);
     assert.ok(g.timeMs > 1000, `${st.id}: 速すぎる。コースが短すぎないか (${g.timeMs}ms)`);
+  }
+});
+
+test('盤は横長 (ランドスケープ)', () => {
+  assert.ok(C.BOARD.w > C.BOARD.h * 2, `横長になっていない (${C.BOARD.w} x ${C.BOARD.h})`);
+});
+
+test('どの品番にもネオンの色がついている', () => {
+  for (const st of C.STAGES) {
+    assert.ok(/^#[0-9a-f]{6}$/i.test(st.neon), `${st.id}: ネオンの色がおかしい (${st.neon})`);
   }
 });
 

@@ -1,35 +1,29 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="イライラ棒工場">
-  <defs>
-    <pattern id="st" width="34" height="34" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-      <rect width="34" height="34" fill="#f5c33c"/>
-      <rect width="17" height="34" fill="#1b2029"/>
-    </pattern>
-  </defs>
-  <rect width="512" height="512" rx="112" fill="#12151d"/>
-  <!-- 検査台のプレート -->
-  <rect x="36" y="36" width="440" height="440" rx="78" fill="#2d364d" stroke="#5a6883" stroke-width="10"/>
-  <rect x="48" y="120" width="20" height="272" rx="10" fill="url(#st)" opacity=".85"/>
-  <rect x="444" y="120" width="20" height="272" rx="10" fill="url(#st)" opacity=".85"/>
-  <g fill="#5e6a82">
-    <circle cx="92" cy="92" r="11"/><circle cx="420" cy="92" r="11"/>
-    <circle cx="92" cy="420" r="11"/><circle cx="420" cy="420" r="11"/>
+  <rect width="512" height="512" rx="112" fill="#06070d"/>
+  <g fill="#ffffff">
+    <circle cx="92" cy="106" r="3" opacity=".5"/><circle cx="410" cy="88" r="2.4" opacity=".4"/>
+    <circle cx="150" cy="412" r="2.6" opacity=".45"/><circle cx="446" cy="360" r="3" opacity=".35"/>
+    <circle cx="330" cy="150" r="2" opacity=".3"/><circle cx="72" cy="300" r="2.2" opacity=".35"/>
   </g>
-  <!-- ユニットのみぞ -->
+  <!-- ネオン管のみぞ -->
   <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M168,136 L168,262 L318,262 L318,384 L382,384" stroke="#ff3d5f" stroke-width="104" opacity=".26"/>
-    <path d="M168,136 L168,262 L318,262 L318,384 L382,384" stroke="#ff3d5f" stroke-width="90"/>
-    <path d="M168,136 L168,262 L318,262 L318,384 L382,384" stroke="#f0ece2" stroke-width="66"/>
+    <path d="M150,180 L330,180 L330,330 L430,330" stroke="#ff3d5f" stroke-width="152" opacity=".10"/>
+    <path d="M150,180 L330,180 L330,330 L430,330" stroke="#ff3d5f" stroke-width="128" opacity=".2"/>
+    <path d="M150,180 L330,180 L330,330 L430,330" stroke="#ff3d5f" stroke-width="112" opacity=".4"/>
+    <path d="M150,180 L330,180 L330,330 L430,330" stroke="#ff3d5f" stroke-width="100"/>
+    <path d="M150,180 L330,180 L330,330 L430,330" stroke="#06070d" stroke-width="78"/>
   </g>
   <!-- 可動部 -->
-  <rect x="228" y="206" width="26" height="112" rx="13" fill="#ffd23f" stroke="#11141c" stroke-width="9"/>
+  <rect x="236" y="130" width="24" height="100" rx="12" fill="#ffd23f" stroke="#06070d" stroke-width="10"/>
   <!-- テスト棒 -->
-  <line x1="168" y1="352" x2="168" y2="196" stroke="#11141c" stroke-width="32" stroke-linecap="round"/>
-  <line x1="168" y1="348" x2="168" y2="200" stroke="#b9c2cf" stroke-width="18" stroke-linecap="round"/>
-  <line x1="168" y1="352" x2="168" y2="292" stroke="#333b4d" stroke-width="32" stroke-linecap="round"/>
-  <circle cx="168" cy="362" r="28" fill="#333b4d" stroke="#5c6880" stroke-width="6"/>
+  <line x1="150" y1="380" x2="150" y2="230" stroke="#11141c" stroke-width="34" stroke-linecap="round"/>
+  <line x1="150" y1="376" x2="150" y2="234" stroke="#b9c2cf" stroke-width="19" stroke-linecap="round"/>
+  <line x1="150" y1="380" x2="150" y2="322" stroke="#333b4d" stroke-width="34" stroke-linecap="round"/>
+  <circle cx="150" cy="392" r="29" fill="#333b4d" stroke="#5c6880" stroke-width="7"/>
   <!-- リング (外径が当たり判定) -->
-  <circle cx="168" cy="154" r="38" fill="none" stroke="#11141c" stroke-width="20"/>
-  <circle cx="168" cy="154" r="38" fill="none" stroke="#dfe6f0" stroke-width="12"/>
+  <circle cx="150" cy="180" r="44" fill="none" stroke="#dfe6f0" stroke-width="30" opacity=".16"/>
+  <circle cx="150" cy="180" r="44" fill="none" stroke="#11141c" stroke-width="22"/>
+  <circle cx="150" cy="180" r="44" fill="none" stroke="#dfe6f0" stroke-width="13"/>
   <!-- GOAL 端子 -->
-  <circle cx="382" cy="384" r="36" fill="none" stroke="#ffd23f" stroke-width="11" stroke-dasharray="17 11"/>
+  <circle cx="430" cy="330" r="40" fill="none" stroke="#ffd23f" stroke-width="10" stroke-dasharray="18 12"/>
 </svg>

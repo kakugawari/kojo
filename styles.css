@@ -3,16 +3,13 @@
    明るい画面/暗い画面のどちらで開いても同じ色になるよう、色は全部ここで決める。 */
 
 :root {
-  --ink: #12151d;          /* 工場の床 (盤の外) */
-  --ink-2: #212736;        /* パネルや板 */
-  --steel: #262d3d;        /* 検査台のプレート */
-  --edge: #49546b;
-  --paper: #f0ece2;        /* コースのみぞの底 */
+  --ink: #06070d;          /* 外の空間。みぞの中もおなじ色 */
+  --ink-2: #131726;        /* パネルや板 */
+  --edge: #39425c;
   --text: #eef2f8;
   --muted: #98a3b8;
-  --wall: #ff3d5f;         /* 外わく = 触れたらショート */
-  --wall-dim: rgba(255, 61, 95, .3);
-  --hazard: #ffd23f;
+  --wall: #ff3d5f;         /* ショート */
+  --hazard: #ffd23f;       /* 可動部 */
   --start: #4ade80;
   --goal: #ffd23f;
   --metal: #dfe6f0;
@@ -60,13 +57,14 @@ body {
 
 #bg { fill: var(--ink); }
 #panel { pointer-events: none; }
+#gripZone { pointer-events: none; }
 
 #course .glow { fill: none; stroke: var(--wall-dim); stroke-linecap: round; stroke-linejoin: round; }
 #course .wall { fill: none; stroke: var(--wall); stroke-linecap: round; stroke-linejoin: round; }
 #course .floor { fill: none; stroke: var(--paper); stroke-linecap: round; stroke-linejoin: round; }
 #course .dash {
-  fill: none; stroke: rgba(150, 120, 90, .18); stroke-linecap: round;
-  stroke-width: 3; stroke-dasharray: 10 16;
+  fill: none; stroke: rgba(255, 255, 255, .1); stroke-linecap: round;
+  stroke-width: 2.5; stroke-dasharray: 8 18;
 }
 
 #board text {
@@ -75,7 +73,8 @@ body {
   paint-order: stroke fill;
 }
 
-.haz-back { stroke: #1a1428; stroke-linecap: round; fill: none; }
+.haz-glow { stroke: var(--hazard); stroke-linecap: round; fill: none; opacity: .18; }
+.haz-back { stroke: #06070d; stroke-linecap: round; fill: none; }
 .haz-face { stroke: var(--hazard); stroke-linecap: round; fill: none; }
 
 /* テスト棒。太い下じき → 金属 → 手もとのゴムグリップ の順に重ねる */
@@ -314,3 +313,40 @@ body {
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
+
+
+/* ------------------------------------------------------------ 横向きのおねがい */
+
+#rotate {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(6, 7, 13, .97);
+}
+/* たてのときだけ出す。「このまま遊ぶ」を押したら二度と出さない */
+@media (orientation: portrait) {
+  #rotate:not(.dismissed) { display: flex; }
+}
+.rotate-box {
+  max-width: 300px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.rotate-ico {
+  font-size: 56px;
+  line-height: 1;
+  animation: tilt 2.4s ease-in-out infinite;
+}
+@keyframes tilt {
+  0%, 40% { transform: rotate(0deg); }
+  60%, 100% { transform: rotate(-90deg); }
+}
+.rotate-box h2 { margin: 0; font-size: 18px; font-weight: 900; }
+.rotate-box p { margin: 0; font-size: 12.5px; line-height: 1.9; color: var(--muted); }

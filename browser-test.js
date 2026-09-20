@@ -100,7 +100,13 @@ async function run() {
   try {
     // ------------------------------------------------ スマホで開く
     section('スマホで開く');
-    const context = await browser.newContext({ ...devices['iPhone 13'] });
+    // 横向きのスマホ。この game は横長の盤で遊ぶ
+    const LANDSCAPE = {
+      viewport: { width: 844, height: 390 },
+      deviceScaleFactor: 3, isMobile: true, hasTouch: true,
+      userAgent: devices['iPhone 13'].userAgent
+    };
+    const context = await browser.newContext(LANDSCAPE);
     const phone = await context.newPage();
     phone.on('pageerror', (e) => errors.push('スマホ: ' + e.message));
     phone.on('console', (m) => { if (m.type() === 'error') errors.push('スマホ: ' + m.text()); });
@@ -127,10 +133,11 @@ async function run() {
     await phone.waitForTimeout(150);
     const drawn = await phone.evaluate(() => {
       const C = window.Core, st = C.STAGES[0];
+      const VOID = '#06070d';   // みぞの中をくりぬいている色
       const paths = [...document.querySelectorAll('#course path')];
-      const floor = paths.find((p) => p.getAttribute('stroke') === 'var(--paper)');
+      const floor = paths.find((p) => p.getAttribute('stroke') === VOID);
       const circles = [...document.querySelectorAll('#course circle')]
-        .filter((c) => c.getAttribute('fill') === 'var(--paper)');
+        .filter((c) => c.getAttribute('fill') === VOID);
       return {
         floorWidth: Number(floor.getAttribute('stroke-width')),
         want: st.corridor * 2,
@@ -140,9 +147,9 @@ async function run() {
     });
     // 絵と当たり判定が同じ数字から出ていること。ここがズレると
     // 「見えているコースの中なのに当たる」が起きる
-    ok(drawn.floorWidth === drawn.want, `床の太さ = コースの太さ (${drawn.floorWidth} / ${drawn.want})`);
+    ok(drawn.floorWidth === drawn.want, `くりぬきの太さ = みぞの太さ (${drawn.floorWidth} / ${drawn.want})`);
     ok(drawn.padR.length === 2 && drawn.padR.every((r) => r === drawn.wantPad),
-      `台の大きさ = 判定の大きさ (${drawn.padR.join(',')} / ${drawn.wantPad})`);
+      `端子の大きさ = 判定の大きさ (${drawn.padR.join(',')} / ${drawn.wantPad})`);
 
     // ------------------------------------------------ 通してみる
     section('コースを通す');
@@ -162,6 +169,27 @@ async function run() {
     ok(after.unlocked === 2, `クリアするとつぎのステージがひらく (${after.unlocked})`);
     ok(after.panel.includes('出荷'), `合格の画面が出る (${after.panel})`);
     ok(after.shown !== '--.--', `自己ベストが上に出る (${after.shown})`);
+
+    // ------------------------------------------------ 画面の向き
+    section('画面の向き');
+    const shown = await phone.evaluate(() =>
+      getComputedStyle(document.getElementById('rotate')).display);
+    ok(shown === 'none', `横向きなら、おねがいは出ない (${shown})`);
+
+    const up = await browser.newContext({ ...devices['iPhone 13'] });   // たて
+    const upPage = await up.newPage();
+    upPage.on('pageerror', (e) => errors.push('たて: ' + e.message));
+    await upPage.goto(URL);
+    await upPage.waitForFunction(() => window.__app);
+    const upShown = await upPage.evaluate(() =>
+      getComputedStyle(document.getElementById('rotate')).display);
+    ok(upShown === 'flex', `たてなら「横にして」が出る (${upShown})`);
+    await upPage.locator('#btnStay').tap();
+    await upPage.waitForTimeout(120);
+    const upAfter = await upPage.evaluate(() =>
+      getComputedStyle(document.getElementById('rotate')).display);
+    ok(upAfter === 'none', `「このまま遊ぶ」で消える (${upAfter})`);
+    await up.close();
 
     // ------------------------------------------------ 暗室検査
     section('暗室検査');

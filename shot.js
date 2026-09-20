@@ -21,7 +21,12 @@ function wait() {
   const server = spawn(process.execPath, [path.join(__dirname, 'serve.js'), String(PORT)], { stdio: 'ignore' });
   await wait();
   const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
-  const ctx = await browser.newContext({ ...devices['iPhone 13'] });
+  // 横向きのスマホ。この game は横長の盤で遊ぶ
+  const ctx = await browser.newContext({
+    viewport: { width: 844, height: 390 },
+    deviceScaleFactor: 3, isMobile: true, hasTouch: true,
+    userAgent: devices['iPhone 13'].userAgent
+  });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => console.log('PAGE ERROR:', e.message));
   page.on('console', (m) => { if (m.type() === 'error' && !m.text().includes('404')) console.log('CONSOLE:', m.text()); });
