@@ -270,6 +270,30 @@ test('すべてのステージは、必ずクリアできる', () => {
   }
 });
 
+// ラインの流れる向き。ぜんぶ同じ向きだと、指の動かしかたが 1 通りしかない
+test('右から左に流れる品番も、左から右に流れる品番もある', () => {
+  const dirs = C.STAGES.map((st) => C.flowDir(st));
+  assert.ok(dirs.some((d) => d > 0), '左から右の品番がない');
+  assert.ok(dirs.some((d) => d < 0), '右から左の品番がない');
+});
+
+test('向きは 1 台おきに入れかわる', () => {
+  for (let i = 1; i < C.STAGES.length; i++) {
+    assert.strictEqual(C.flowDir(C.STAGES[i]), -C.flowDir(C.STAGES[i - 1]),
+      `${C.STAGES[i].id} が前の品番と同じ向き`);
+  }
+});
+
+test('向きは START と GOAL のならびそのもの', () => {
+  for (const st of C.STAGES) {
+    const a = C.startPoint(st), b = C.goalPoint(st);
+    assert.strictEqual(C.flowDir(st) > 0, b.x >= a.x, `${st.id}`);
+    assert.strictEqual(C.flowLabel(st), C.flowDir(st) > 0 ? '左から右' : '右から左');
+    // 端から端まで使っていること (盤のはしからはしへ流れる)
+    assert.ok(Math.abs(b.x - a.x) > C.BOARD.w * 0.7, `${st.id}: 端から端まで流れていない`);
+  }
+});
+
 test('盤は横長 (ランドスケープ)', () => {
   assert.ok(C.BOARD.w > C.BOARD.h * 2, `横長になっていない (${C.BOARD.w} x ${C.BOARD.h})`);
 });

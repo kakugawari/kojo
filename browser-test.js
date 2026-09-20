@@ -151,6 +151,29 @@ async function run() {
     ok(drawn.padR.length === 2 && drawn.padR.every((r) => r === drawn.wantPad),
       `端子の大きさ = 判定の大きさ (${drawn.padR.join(',')} / ${drawn.wantPad})`);
 
+    // 右から左に流れる品番では、START 端子が盤の右がわに描かれていること。
+    // 絵が向きのデータについてきているかを、実際の画面で見る
+    for (const i of [0, 1]) {
+      await phone.evaluate((n) => window.__app.selectStage(n), i);
+      await phone.waitForTimeout(150);
+      const pads = await phone.evaluate(() => {
+        const C = window.Core, st = C.STAGES[window.__app.state().index];
+        const texts = [...document.querySelectorAll('#course text')];
+        const find = (t) => texts.find((e) => e.textContent.trim() === t);
+        return {
+          model: st.model,
+          dir: C.flowDir(st),
+          startX: Number(find('START').getAttribute('x')),
+          goalX: Number(find('GOAL').getAttribute('x')),
+          w: C.BOARD.w
+        };
+      });
+      const rightward = pads.goalX > pads.startX;
+      ok(rightward === (pads.dir > 0),
+        `${pads.model}: ${pads.dir > 0 ? '左から右' : '右から左'} に描かれている (START ${Math.round(pads.startX)} → GOAL ${Math.round(pads.goalX)})`);
+    }
+    await phone.evaluate(() => window.__app.selectStage(0));
+
     // ------------------------------------------------ 通してみる
     section('コースを通す');
     await phone.evaluate(() => window.__app.wipe());

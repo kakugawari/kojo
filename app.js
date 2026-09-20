@@ -561,7 +561,7 @@
         (open ? '' : ' disabled') + ' aria-current="' + (i === game.index) + '">' +
         '<span class="no">' + (open ? (i + 1) : '🔒') + '</span>' +
         '<span class="nm">' + esc(st.model) + ' <span class="dim">' + esc(st.name) + '</span>' +
-        '<span class="sub">' + (open ? 'みぞ幅 ' + (st.corridor * 2) + ' ・ 可動部 ' + st.hazards.length + ' か所'
+        '<span class="sub">' + (open ? (C.flowDir(st) > 0 ? '→ ' : '← ') + C.flowLabel(st) + ' ・ みぞ幅 ' + (st.corridor * 2) + ' ・ 可動部 ' + st.hazards.length + ' か所'
           : 'まえの品番に合格すると流れてくる') + '</span></span>' +
         '<span class="rec">' + (b === undefined ? '' : '★ ' + C.formatTime(b)) + '</span>' +
         '</button>';

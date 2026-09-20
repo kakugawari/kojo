@@ -76,10 +76,12 @@
     },
     {
       id: 's2', model: 'IRB-02', name: '量産 A 型', corridor: 48, neon: '#7c6bff',
-      path: [[90, 300], [260, 300], [260, 100], [480, 100], [480, 300], [700, 300], [700, 100], [960, 100]],
+      // 右から左へ流れるユニット。左右を反転させただけなので、
+      // 区間どうしの間かくも盤からのはみ出しも、もとのまま崩れない
+      path: [[970, 300], [800, 300], [800, 100], [580, 100], [580, 300], [360, 300], [360, 100], [100, 100]],
       hazards: [
-        { type: 'rotor', side: -1, period: 2000, phase: 0.05 },
-        { type: 'slide', side: -1, period: 2200, phase: 0 }
+        { type: 'slide', side: 1, period: 2200, phase: 0.3 },
+        { type: 'slide', side: -1, period: 2000, phase: 0.5 }
       ]
     },
     {
@@ -94,13 +96,14 @@
     },
     {
       id: 's4', model: 'IRB-04', name: 'ジグザグ型', corridor: 40, neon: '#4dff9e',
-      path: [[80, 100], [310, 100], [310, 310], [540, 310], [540, 100], [770, 100], [770, 310], [980, 310]],
+      // 右から左
+      path: [[980, 100], [750, 100], [750, 310], [520, 310], [520, 100], [290, 100], [290, 310], [80, 310]],
       hazards: [
-        { type: 'rotor', side: -1, period: 2000, phase: 0.15 },
-        { type: 'slide', side: 1, period: 2300, phase: 0.65 },
-        { type: 'slide', side: -1, period: 2300, phase: 0.05 },
-        { type: 'pulse', side: 1, period: 2000, phase: 0.5 },
-        { type: 'rotor', side: 1, period: 2300, phase: 0.5 }
+        { type: 'rotor', side: -1, period: 2600, phase: 0.8 },
+        { type: 'slide', side: 1, period: 1700, phase: 0.6 },
+        { type: 'slide', side: 1, period: 1900, phase: 0.3 },
+        { type: 'pulse', side: -1, period: 2100, phase: 0.75 },
+        { type: 'rotor', side: -1, period: 1900, phase: 0.95 }
       ]
     },
     {
@@ -119,8 +122,9 @@
     },
     {
       id: 's6', model: 'IRB-06', name: '鬼仕様', corridor: 32, neon: '#ff3d5f',
-      path: [[70, 90], [70, 310], [240, 310], [240, 90], [410, 90], [410, 310], [580, 310], [580, 90],
-             [750, 90], [750, 310], [920, 310], [920, 90], [990, 90]],
+      // 右から左
+      path: [[990, 90], [990, 310], [820, 310], [820, 90], [650, 90], [650, 310], [480, 310], [480, 90],
+             [310, 90], [310, 310], [140, 310], [140, 90], [70, 90]],
       hazards: [
         { type: 'slide', side: 1, period: 1300, phase: 0.75 },
         { type: 'pulse', side: -1, period: 1700, phase: 0.45 },
@@ -544,6 +548,18 @@
    */
   function padRadius(stage) { return stage.corridor + 22; }
 
+  /**
+   * ラインの流れる向き。1 = 左から右、-1 = 右から左。
+   * 品番によって向きが変わるので、画面の文言もここから出す
+   * (app.js が自分で座標を見くらべない)。
+   */
+  function flowDir(stage) {
+    return goalPoint(stage).x >= startPoint(stage).x ? 1 : -1;
+  }
+
+  /** 向きの言いかた。一覧に出す。 */
+  function flowLabel(stage) { return flowDir(stage) > 0 ? '左から右' : '右から左'; }
+
   function startPoint(stage) { return { x: stage.path[0][0], y: stage.path[0][1] }; }
   function goalPoint(stage) {
     const p = stage.path[stage.path.length - 1];
@@ -793,6 +809,8 @@
     startPoint: startPoint,
     goalPoint: goalPoint,
     padRadius: padRadius,
+    flowDir: flowDir,
+    flowLabel: flowLabel,
     inStart: inStart,
     inGoal: inGoal,
 
